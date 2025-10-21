@@ -1,0 +1,22 @@
+.face {
+  transition: transform 0.3s ease;
+  transform-origin: center;
+}
+
+.logoIcon:hover .left {
+  transform: translateX(-2px) translateY(1px);
+}
+
+.logoIcon:hover .right {
+  transform: translateX(2px) translateY(1px);
+}
+
+.logoIcon:hover .top {
+  transform: translateY(-2px);
+}
+
+.static:hover .left,
+.static:hover .right,
+.static:hover .top {
+  transform: none !important;
+}
