@@ -4,14 +4,15 @@ import React, { useState } from "react";
 import DashboardSidebar from "@/widgets/Sidebar/ui/DashboardSidebar";
 
 interface DashboardLayoutProps {
-  role?: "COMPANY" | "OFFICE" | "EMPLOYEE";
-  email?: string;
+  children: React.ReactNode;
 }
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({
-  role = "EMPLOYEE",
-  email = "user@example.com",
+  children,
 }) => {
+  // Временные значения для демонстрации
+  const role = "EMPLOYEE";
+  const email = "user@example.com";
   // 🧠 Активный раздел (управляется сайдбаром)
   const [activeSection, setActiveSection] = useState<string>("HOME");
 
@@ -20,6 +21,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
 
   // 📦 Динамическое содержимое
   const renderContent = () => {
+    // Если есть children (страница), отображаем их
+    if (children) {
+      return children;
+    }
+    
+    // Иначе показываем контент по умолчанию
     switch (activeSection) {
       case "BOOKINGS":
         return <p>📅 Здесь список ваших броней</p>;
