@@ -79,23 +79,31 @@ const RegisterPage: React.FC = () => {
           );
 
           if (checkAuthResponse.data) {
+            console.log("[Register] Roles from checkAuth:", checkAuthResponse.data.roles);
+            console.log("[Register] Roles from login response:", loginResponse.data.role);
+            
             setUser({
               email: checkAuthResponse.data.email,
               fullName: checkAuthResponse.data.fullName,
               locationId: checkAuthResponse.data.locationId,
               locationName: checkAuthResponse.data.locationName,
-              roles: checkAuthResponse.data.roles,
+              roles: checkAuthResponse.data.roles || loginResponse.data.role || [],
             });
 
-            // Перенаправляем в зависимости от роли
-            const roles = checkAuthResponse.data.roles;
-            if (roles.includes("ROLE_ADMIN_WORKSPACE")) {
-              
-            } else if (roles.includes("ROLE_ADMIN_LOCATION")) {
-              
-            } else {
-              
-            }
+            // Перенаправляем на главную страницу dashboard
+            router.push("/dashboard");
+            return;
+          } else {
+            // Если не удалось получить данные пользователя, используем роли из ответа логина
+            console.log("[Register] Using roles from login response:", loginResponse.data.role);
+            setUser({
+              email: data.email,
+              fullName: data.fullName,
+              locationId: 0,
+              locationName: "",
+              roles: loginResponse.data.role || [],
+            });
+            router.push("/dashboard");
             return;
           }
         }

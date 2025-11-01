@@ -7,4 +7,5 @@ export { useAuthStore } from "./model/authStore";
 export { authApi } from "./api/auth";
 export { organizationsApi } from "./api/organizations";
 export type { Organization } from "./api/organizations";
+export { useAuthCheck, useTokenRefresh } from "./hooks";
 

@@ -65,6 +65,16 @@ export async function apiRequest<T>(
         errorMessage = errorText || errorMessage;
       }
 
+      // Специальная обработка для 404
+      if (status === 404) {
+        errorMessage = "Эндпоинт не найден. Проверьте, запущен ли сервер и правильность пути API.";
+      }
+
+      // Специальная обработка для 403
+      if (status === 403) {
+        errorMessage = errorData?.message || "Доступ запрещен. У вас нет прав для выполнения этого действия.";
+      }
+
       console.error(`[API Error] ${status} ${url}`, {
         status,
         error: errorData || errorMessage,
@@ -191,19 +201,76 @@ export async function apiRequest<T>(
   }
 }
 
-// Функция для авторизованных запросов
+// Функция для авторизованных запросов с автоматическим обновлением токена
 export async function authenticatedRequest<T>(
   endpoint: string,
   token: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  return apiRequest<T>(endpoint, {
+  // Логируем информацию о токене для отладки (без самого токена)
+  console.log(`[authenticatedRequest] Making request to ${endpoint}`, {
+    hasToken: !!token,
+    tokenLength: token?.length,
+    tokenPrefix: token?.substring(0, 20) + "...",
+  });
+
+  // Выполняем запрос
+  let response = await apiRequest<T>(endpoint, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   });
+
+  // Если получили 401, пытаемся обновить токен
+  if (response.error?.status === 401) {
+    // Получаем refresh token из zustand store
+    // Импортируем динамически чтобы избежать циклических зависимостей
+    const { useAuthStore } = await import("@/features/auth");
+    const store = useAuthStore.getState();
+    const refreshToken = store.refreshToken;
+
+    if (refreshToken) {
+      const { authApi } = await import("@/features/auth");
+      const refreshResponse = await authApi.refreshToken({ refreshToken });
+
+      if (refreshResponse.data) {
+        // Сохраняем новые токены
+        store.refreshTokens(
+          refreshResponse.data.accessToken,
+          refreshResponse.data.refreshToken
+        );
+
+        // Повторяем запрос с новым токеном
+        response = await apiRequest<T>(endpoint, {
+          ...options,
+          headers: {
+            Authorization: `Bearer ${refreshResponse.data.accessToken}`,
+            ...options.headers,
+          },
+        });
+      } else {
+        // Если refresh не сработал, выходим
+        store.logout();
+        return {
+          error: {
+            message: "Сессия истекла. Пожалуйста, войдите снова.",
+            status: 401,
+          },
+        };
+      }
+    } else {
+      return {
+        error: {
+          message: "Токен авторизации не найден",
+          status: 401,
+        },
+      };
+    }
+  }
+
+  return response;
 }
 
 export default apiRequest;

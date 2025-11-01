@@ -21,8 +21,41 @@ const LoginPage: React.FC = () => {
         password: data.password,
       });
 
+      // Проверяем статус ответа
+      const status = response.status;
+
+      // Если статус 202 Accepted - заявка еще на рассмотрении
+      if (status === 202) {
+        setError(
+          "Ваша заявка все еще находится на обработке. Попробуйте позже или обратитесь к администратору."
+        );
+        setIsLoading(false);
+        return;
+      }
+
       if (response.error) {
-        setError(response.error.message || "Ошибка входа");
+        // Проверяем, не является ли это случаем, когда пользователь на проверке
+        const errorMessage = response.error.message || "";
+        const errorStatus = response.error.status;
+        
+        // Если 404 - проблема с сервером/эндпоинтом
+        if (errorStatus === 404) {
+          setError("Сервер недоступен или эндпоинт не найден. Проверьте подключение к серверу.");
+          setIsLoading(false);
+          return;
+        }
+        
+        if (
+          errorMessage.toLowerCase().includes("user with provided email does not exist") ||
+          errorMessage.toLowerCase().includes("пользователь с таким email не найден")
+        ) {
+          setError(
+            "Ваша заявка все еще находится на проверке. Попробуйте позже или обратитесь к администратору."
+          );
+        } else {
+          setError(errorMessage || "Ошибка входа");
+        }
+        setIsLoading(false);
         return;
       }
 
@@ -39,26 +72,30 @@ const LoginPage: React.FC = () => {
         );
 
         if (checkAuthResponse.data) {
+          console.log("[Login] Roles from checkAuth:", checkAuthResponse.data.roles);
+          console.log("[Login] Roles from login response:", response.data.role);
+          
           setUser({
             email: checkAuthResponse.data.email,
             fullName: checkAuthResponse.data.fullName,
             locationId: checkAuthResponse.data.locationId,
             locationName: checkAuthResponse.data.locationName,
-            roles: checkAuthResponse.data.roles,
+            roles: checkAuthResponse.data.roles || response.data.role || [],
           });
 
-          // Перенаправляем в зависимости от роли
-          const roles = checkAuthResponse.data.roles;
-          if (roles.includes("ROLE_ADMIN_WORKSPACE")) {
-            router.push("/dashboard/company");
-          } else if (roles.includes("ROLE_ADMIN_LOCATION")) {
-            router.push("/dashboard/office");
-          } else {
-            router.push("/dashboard/employee");
-          }
+          // Перенаправляем на главную страницу dashboard
+          router.push("/dashboard");
         } else {
-          // Если не удалось получить данные пользователя, все равно перенаправляем
-          router.push("/dashboard/employee");
+          // Если не удалось получить данные пользователя, используем роли из ответа логина
+          console.log("[Login] Using roles from login response:", response.data.role);
+          setUser({
+            email: data.email,
+            fullName: "",
+            locationId: 0,
+            locationName: "",
+            roles: response.data.role || [],
+          });
+          router.push("/dashboard");
         }
       }
     } catch (err) {
