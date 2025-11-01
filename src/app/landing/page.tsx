@@ -1,9 +1,11 @@
 import React from "react";
-import HeroSection from "./ui/HeroSection";
-import FeaturesSection from "./ui/FeaturesSection";
-import HowItWorksSection from "./ui/HowItWorksSection";
-import FAQSection from "./ui/FAQSection";
-import Footer from "@/widgets/Footer/ui/Footer";
+import {
+  HeroSection,
+  FeaturesSection,
+  HowItWorksSection,
+  FAQSection,
+} from "@/widgets/landing";
+import { Footer } from "@/widgets/Footer";
 
 const LandingPage: React.FC = () => {
   return (

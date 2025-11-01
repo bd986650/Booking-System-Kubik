@@ -34,7 +34,9 @@ export const AuthButton: React.FC<ButtonProps> = ({
     lg: "h-12 sm:h-14 text-base sm:text-lg",
   };
 
-  const disabledClasses = disabled ? "opacity-50 cursor-not-allowed" : "";
+  const disabledClasses = disabled 
+    ? "opacity-50 cursor-not-allowed pointer-events-none" 
+    : "";
 
   return (
     <button

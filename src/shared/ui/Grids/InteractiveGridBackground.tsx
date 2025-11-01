@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/shared/lib/utils";
-import { InteractiveGridPattern } from "@/shared/ui/Grids/interactive-grid-pattern";
+import { InteractiveGridPattern } from "@/shared/ui/grids";
 
 const InteractiveGridBackground: React.FC = () => {
   return (

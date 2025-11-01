@@ -1,4 +1,4 @@
-import OfficeConstructor from "@/features/office-map/index";
+import { OfficeConstructor } from "@/features/office-map";
 
 export default function MapPage() {
     return (
