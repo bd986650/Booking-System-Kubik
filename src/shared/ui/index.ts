@@ -5,7 +5,7 @@ export * from "./inputs/InputField";
 export { Button, AuthButton, ScrollButton } from "./buttons";
 
 // Cards
-export { Card, CardHeader, CardContent, CardDecorator } from "./cards";
+export { Card, CardHeader, CardContent, CardDecorator } from "./Сards";
 
 // Grids
 export { InteractiveGridBackground, InteractiveGridPattern } from "./grids";
@@ -24,4 +24,3 @@ export { AuthLayout } from "./layouts/AuthLayout";
 
 // OrganizationSelector
 export { OrganizationSelector } from "./OrganizationSelector";
-
