@@ -1,4 +1,4 @@
-import { apiRequest, authenticatedRequest } from "@/shared/api/config";
+import { authenticatedRequest } from "@/shared/api/config";
 import type { RegistrationRequest } from "../model/types";
 
 export const registrationRequestsApi = {

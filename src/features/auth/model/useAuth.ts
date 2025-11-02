@@ -22,15 +22,11 @@ interface AuthSuccessResponse {
   };
 }
 
-interface AuthErrorResponse {
-  message: string;
-}
-
 export type AuthResponse =
   | { ok: true; data: AuthSuccessResponse }
   | { ok: false; error: string };
 
-export function useAuth(mode: AuthMode) {
+export function useAuth(_mode: AuthMode) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

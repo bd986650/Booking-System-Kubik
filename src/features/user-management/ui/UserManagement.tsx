@@ -164,7 +164,7 @@ export const UserManagement: React.FC = () => {
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
           <h2 className="text-xl font-bold text-yellow-900 mb-2">Доступ ограничен</h2>
           <p className="text-yellow-800 mb-2">
-            Для доступа к разделу "Управление пользователями" необходимы права администратора.
+            Для доступа к разделу &quot;Управление пользователями&quot; необходимы права администратора.
           </p>
           <p className="text-sm text-yellow-700">
             Требуемые роли: <strong>ROLE_ADMIN_PROJECT</strong> или <strong>ROLE_ADMIN_WORKSPACE</strong>

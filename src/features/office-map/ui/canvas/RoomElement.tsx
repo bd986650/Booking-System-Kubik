@@ -1,5 +1,5 @@
 import React from "react";
-import type { Room, ID } from "../../model/types";
+import type { Room } from "../../model/types";
 
 interface RoomElementProps {
   room: Room;

@@ -15,7 +15,7 @@ export const useRoomInteraction = ({
   svgRef,
   offset,
   zoom,
-  rooms,
+  rooms: _rooms,
   currentFloor,
   setFloors,
 }: UseRoomInteractionParams) => {
