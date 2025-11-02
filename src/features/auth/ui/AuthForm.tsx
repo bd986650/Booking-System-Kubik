@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { InputField, OrganizationSelector } from "@/shared/ui";
-import { AuthButton } from "@/shared/ui/buttons";
+import { AuthButton } from "@/shared/ui/Buttons";
 import { organizationsApi, type Organization } from "@/features/auth";
 
 interface AuthFormProps {

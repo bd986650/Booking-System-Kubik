@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { Accordion } from "@/shared/ui/accordions";
+import { Accordion } from "@/shared/ui/Accordions";
 import { faqItems, QuestionItem as FAQQuestionItem } from "@/widgets/landing";
 
 const FAQSection: React.FC = () => {

@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { Button } from "@/shared/ui/buttons";
+import { Button } from "@/shared/ui/Buttons";
 import { features, FeatureCardItem } from "@/widgets/landing";
 
 const FeaturesSection: React.FC = () => {

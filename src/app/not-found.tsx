@@ -2,7 +2,7 @@
 
 import React, { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/shared/ui/buttons";
+import { Button } from "@/shared/ui/Buttons";
 
 const NotFoundPage: React.FC = () => {
   const router = useRouter();

@@ -1,6 +1,6 @@
 import React from "react";
 import { LandingHeader } from "@/widgets/Header";
-import { ScrollButton } from "@/shared/ui/buttons";
+import { ScrollButton } from "@/shared/ui/Buttons";
 import { InteractiveGridBackground } from "@/shared/ui/grids";
 
 const HeroSection: React.FC = () => {

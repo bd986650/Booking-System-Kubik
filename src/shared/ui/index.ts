@@ -2,7 +2,7 @@
 export * from "./inputs/InputField";
 
 // Buttons
-export { Button, AuthButton, ScrollButton } from "./buttons";
+export { Button, AuthButton, ScrollButton } from "./Buttons";
 
 // Cards
 export { Card, CardHeader, CardContent, CardDecorator } from "./Cards";
@@ -11,10 +11,10 @@ export { Card, CardHeader, CardContent, CardDecorator } from "./Cards";
 export { InteractiveGridBackground, InteractiveGridPattern } from "./grids";
 
 // Branding
-export * from "./branding";
+export * from "./Branding";
 
 // Accordions
-export * from "./accordions";
+export * from "./Accordions";
 
 // RoleSelector
 export { RoleSelector } from "./RoleSelector";
