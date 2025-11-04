@@ -7,6 +7,10 @@ import { AuthorizationRequests } from "@/features/authorization-requests";
 import { UserManagement } from "@/features/user-management";
 import { useAuthCheck } from "@/features/auth/hooks/useAuthCheck";
 import { useTokenRefresh } from "@/features/auth/hooks/useTokenRefresh";
+import { Bookings } from "@/features/booking";
+import { Workspaces } from "@/features/workspaces";
+import { Overview } from "@/features/overview";
+import { Profile } from "@/features/profile";
 
 type DashboardSection = 
   | "overview"
@@ -46,33 +50,13 @@ export default function DashboardPage() {
       case "user-management":
         return <UserManagement />;
       case "overview":
-        return (
-          <div className="p-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Обзор</h1>
-            <p className="text-gray-600">Добро пожаловать в систему бронирования!</p>
-          </div>
-        );
+        return <Overview />;
       case "workspaces":
-        return (
-          <div className="p-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Рабочие пространства</h1>
-            <p className="text-gray-600">Раздел находится в разработке</p>
-          </div>
-        );
+        return <Workspaces />;
       case "bookings":
-        return (
-          <div className="p-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Бронирования</h1>
-            <p className="text-gray-600">Раздел находится в разработке</p>
-          </div>
-        );
+        return <Bookings />;
       case "profile":
-        return (
-          <div className="p-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Профиль</h1>
-            <p className="text-gray-600">Раздел находится в разработке</p>
-          </div>
-        );
+        return <Profile />;
       default:
         return null;
     }

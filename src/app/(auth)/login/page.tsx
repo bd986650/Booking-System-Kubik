@@ -81,6 +81,7 @@ const LoginPage: React.FC = () => {
             locationId: checkAuthResponse.data.locationId,
             locationName: checkAuthResponse.data.locationName,
             roles: checkAuthResponse.data.roles || response.data.role || [],
+            organizationId: checkAuthResponse.data.organizationId,
           });
 
           // Перенаправляем на главную страницу dashboard

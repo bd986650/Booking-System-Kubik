@@ -17,7 +17,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
   return (
     <div className="flex min-h-screen">
       {/* Левая часть - Только изображение */}
-      <div className="hidden lg:flex lg:w-3/7 lg:sticky lg:top-0 lg:h-screen">
+      <div className="hidden lg:flex lg:w-4/7 lg:sticky lg:top-0 lg:h-screen">
         <div className="relative w-full h-full">
           <Image
             src="/images/login-image.png"

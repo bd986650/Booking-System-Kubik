@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { AccordionItem, AccordionTrigger, AccordionContent } from '@/shared/ui/Accordions'
+import { AccordionItem, AccordionTrigger, AccordionContent } from '@/shared/ui/accordions'
 import { DynamicIcon } from 'lucide-react/dynamic'
 import type { FAQItem } from '../model/questionsData'
 

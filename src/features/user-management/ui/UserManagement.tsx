@@ -5,6 +5,7 @@ import { useAuthStore } from "@/features/auth";
 import { usersApi } from "../api/users";
 import type { UserInfo, AssignRoleRequest } from "../model/types";
 import { UserRole, ROLE_LABELS } from "@/shared/types/user";
+import { canAssignRole, canManageUser, isProjectAdmin, getHighestRole } from "@/shared/lib/roles";
 
 export const UserManagement: React.FC = () => {
   const { accessToken, user } = useAuthStore();
@@ -12,6 +13,7 @@ export const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingEmails, setProcessingEmails] = useState<Set<string>>(new Set());
+  const [confirmWorkspaceAdminEmail, setConfirmWorkspaceAdminEmail] = useState<string | null>(null);
 
   // Проверяем права доступа
   const hasAdminAccess = user?.roles?.some(
@@ -61,7 +63,12 @@ export const UserManagement: React.FC = () => {
     }
 
     if (response.data) {
-      setUsers(response.data);
+      const currentUser = user;
+      // Project admin видит только свой офис; workspace admin — всех
+      const filtered = isProjectAdmin(currentUser)
+        ? response.data.filter((u) => u.locationId === currentUser?.locationId)
+        : response.data;
+      setUsers(filtered);
     }
     setLoading(false);
   };
@@ -111,6 +118,11 @@ export const UserManagement: React.FC = () => {
   const handleRevokeRole = async (email: string, role: string) => {
     if (!accessToken) {
       setError("Токен авторизации не найден");
+      return;
+    }
+
+    // Нельзя снимать базовую роль пользователя
+    if (role === "ROLE_USER") {
       return;
     }
 
@@ -251,71 +263,99 @@ export const UserManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => {
-                const isProcessing = processingEmails.has(user.email);
-                const userRoles = user.roles || [];
+              {users.map((rowUser) => {
+                const isProcessing = processingEmails.has(rowUser.email);
+                const userRoles = rowUser.roles || [];
+                const manageAllowed = canManageUser(user || null, { locationId: rowUser.locationId });
 
                 return (
-                  <tr key={user.email} className="hover:bg-gray-50">
+                  <tr key={rowUser.email} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {user.email}
+                      {rowUser.email}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.fullName}
+                      {rowUser.fullName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.locationName}
+                      {rowUser.locationName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-wrap gap-2">
-                        {userRoles.map((role) => (
+                      {(() => {
+                        const highest = getHighestRole(userRoles);
+                        if (!highest) return <span className="text-xs text-gray-500">нет ролей</span>;
+                        const isAdmin = highest === "ROLE_ADMIN_WORKSPACE" || highest === "ROLE_ADMIN_PROJECT";
+                        return (
                           <span
-                            key={role}
-                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              isAdmin ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
+                            }`}
                           >
-                            {ROLE_LABELS[role as UserRole] || role}
+                            {ROLE_LABELS[highest]}
                           </span>
-                        ))}
-                      </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex flex-col gap-2">
-                        {/* Назначение ролей */}
-                        <div className="flex gap-2">
-                          {(["ROLE_USER", "ROLE_ADMIN_WORKSPACE", "ROLE_ADMIN_PROJECT"] as UserRole[]).map(
-                            (role) => {
-                              const hasRole = userRoles.includes(role);
-                              return (
-                                <button
-                                  key={role}
-                                  onClick={() => handleAssignRole(user.email, role)}
-                                  disabled={hasRole || isProcessing}
-                                  className={`px-3 py-1 text-xs rounded transition-colors ${
-                                    hasRole
-                                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                                      : "bg-green-600 text-white hover:bg-green-700"
-                                  } ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}`}
-                                >
-                                  {hasRole ? "✓ " : "+ "}
-                                  {ROLE_LABELS[role]}
-                                </button>
-                              );
+                      <div className="flex flex-col gap-3">
+                        {/* Спец-действие: назначить единственного администратора воркспейса */}
+                        <div>
+                          <button
+                            onClick={() => setConfirmWorkspaceAdminEmail(rowUser.email)}
+                            disabled={
+                              isProcessing || !manageAllowed || !canAssignRole(user || null, "ROLE_ADMIN_WORKSPACE") ||
+                              userRoles.includes("ROLE_ADMIN_WORKSPACE")
                             }
-                          )}
+                            className={`px-3 py-2 text-xs rounded-md transition-colors font-semibold ${
+                              isProcessing || !manageAllowed || userRoles.includes("ROLE_ADMIN_WORKSPACE")
+                                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                                : "bg-blue-600 text-white hover:bg-blue-700"
+                            }`}
+                          >
+                            Сделать админом воркспейса
+                          </button>
                         </div>
-                        {/* Отзыв ролей */}
-                        {userRoles.length > 0 && (
-                          <div className="flex gap-2">
-                            {userRoles.map((role) => (
+
+                        {/* Быстрые назначения ролей */}
+                        <div className="flex flex-wrap gap-2">
+                          {(["ROLE_ADMIN_PROJECT", "ROLE_USER"] as UserRole[]).map((role) => {
+                            const hasRole = userRoles.includes(role);
+                            const roleAllowed = canAssignRole(user || null, role);
+                            const disabled = hasRole || isProcessing || !manageAllowed || !roleAllowed;
+                            return (
                               <button
                                 key={role}
-                                onClick={() => handleRevokeRole(user.email, role)}
-                                disabled={isProcessing}
-                                className={`px-3 py-1 text-xs rounded bg-red-600 text-white hover:bg-red-700 transition-colors ${
-                                  isProcessing ? "opacity-50 cursor-not-allowed" : ""
+                                onClick={() => handleAssignRole(rowUser.email, role)}
+                                disabled={disabled}
+                                className={`px-3 py-1.5 text-xs rounded border transition-colors ${
+                                  disabled
+                                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
                                 }`}
                               >
-                                - {ROLE_LABELS[role as UserRole] || role}
+                                {hasRole ? "✓ " : "+ "}
+                                {ROLE_LABELS[role]}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Снятие ролей */}
+                        {userRoles.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {userRoles
+                              .filter((role) => role !== "ROLE_USER")
+                              .map((role) => (
+                              <button
+                                key={role}
+                                onClick={() => handleRevokeRole(rowUser.email, role)}
+                                disabled={isProcessing || !manageAllowed}
+                                className={`px-3 py-1.5 text-xs rounded border transition-colors ${
+                                  isProcessing || !manageAllowed
+                                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                    : "bg-white text-red-600 border-red-300 hover:bg-red-50"
+                                }`}
+                              >
+                                Снять: {ROLE_LABELS[role as UserRole] || role}
                               </button>
                             ))}
                           </div>
@@ -327,6 +367,36 @@ export const UserManagement: React.FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {confirmWorkspaceAdminEmail && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Переназначить администратора воркспейса</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Вы собираетесь назначить пользователя <span className="font-semibold">{confirmWorkspaceAdminEmail}</span> единственным администратором
+              воркспейса. Текущее ограничение — один администратор воркспейса на проект: права будут переназначены.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmWorkspaceAdminEmail(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  const email = confirmWorkspaceAdminEmail;
+                  setConfirmWorkspaceAdminEmail(null);
+                  await handleAssignRole(email, "ROLE_ADMIN_WORKSPACE");
+                }}
+                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Назначить
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

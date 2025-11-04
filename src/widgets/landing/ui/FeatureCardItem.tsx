@@ -1,6 +1,6 @@
 import React from "react";
 import { Feature } from '../model/featuresData';
-import { Card, CardHeader, CardContent, CardDecorator } from '@/shared/ui/Cards';
+import { Card, CardHeader, CardContent, CardDecorator } from '@/shared/ui/cards';
 
 type FeatureCardItemProps = {
   feature: Feature;

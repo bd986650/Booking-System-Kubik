@@ -3,6 +3,8 @@
 import React from "react";
 import { UserRole } from "@/shared/types/user";
 import { useAuthStore } from "@/features/auth";
+import { LogoIcon } from "@/shared/ui/branding";
+import { Button } from "@/shared/ui/buttons";
 
 type DashboardSection = 
   | "overview"
@@ -81,22 +83,23 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 shadow-sm flex flex-col">
+    <aside className="w-64 bg-white border-r border-gray-300 shadow-sm flex flex-col">
       {/* Header */}
-      <div className="p-6 border-b border-gray-200">
+      <div className="p-5 border-b border-gray-300">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg">🏗️</span>
-          </div>
+          <LogoIcon size={36} colorClass="text-blue-500" />
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Кубик</h2>
-            <p className="text-xs text-gray-500">Система бронирования</p>
+            <h2 className="text-lg font-extrabold text-gray-900">Кубик</h2>
+            <p className="text-xs text-gray-500 font-medium">Система бронирования</p>
           </div>
         </div>
         {user && (
-          <div className="text-sm">
-            <p className="font-medium text-gray-900">{user.fullName}</p>
-            <p className="text-gray-500">{user.email}</p>
+          <div className="pt-3 border-t border-gray-200">
+            <p className="font-bold text-gray-900 text-sm mb-0.5">{user.fullName}</p>
+            <p className="text-xs text-gray-500">{user.email}</p>
+            {user.locationName && (
+              <p className="text-xs text-gray-400 mt-1">📍 {user.locationName}</p>
+            )}
           </div>
         )}
       </div>
@@ -110,14 +113,14 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
               <li key={item.id}>
                 <button
                   onClick={() => onSectionChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
                     isActive
-                      ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600"
-                      : "text-gray-700 hover:bg-gray-50"
+                      ? "bg-blue-500 text-white shadow-md shadow-blue-500/20 font-semibold"
+                      : "text-gray-700 hover:bg-gray-50 hover:text-blue-600 font-medium border border-transparent hover:border-gray-200"
                   }`}
                 >
-                  <span className="text-xl">{item.icon}</span>
-                  <span className="font-medium">{item.label}</span>
+                  <span className="text-lg">{item.icon}</span>
+                  <span className="text-sm">{item.label}</span>
                 </button>
               </li>
             );
@@ -126,14 +129,16 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200">
-        <button
+      <div className="p-4 border-t border-gray-300 bg-gray-50">
+        <Button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+          variant="outline"
+          color="gray"
+          className="w-full text-sm py-2"
         >
-          <span className="text-xl">🚪</span>
-          <span className="font-medium">Выйти</span>
-        </button>
+          <span className="mr-2">🚪</span>
+          Выйти
+        </Button>
       </div>
     </aside>
   );

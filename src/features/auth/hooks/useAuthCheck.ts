@@ -32,12 +32,14 @@ export const useAuthCheck = () => {
       // Если токен валиден, продолжаем
       if (checkResponse.data) {
         console.log("[useAuthCheck] Roles from checkAuth:", checkResponse.data.roles);
+        console.log("[useAuthCheck] OrganizationId from checkAuth:", checkResponse.data.organizationId);
         setUser({
           email: checkResponse.data.email,
           fullName: checkResponse.data.fullName,
           locationId: checkResponse.data.locationId,
           locationName: checkResponse.data.locationName,
           roles: checkResponse.data.roles || [],
+          organizationId: checkResponse.data.organizationId,
         });
         setIsChecking(false);
         return;
@@ -61,12 +63,14 @@ export const useAuthCheck = () => {
 
           if (newCheckResponse.data) {
             console.log("[useAuthCheck] Roles after refresh:", newCheckResponse.data.roles);
+            console.log("[useAuthCheck] OrganizationId after refresh:", newCheckResponse.data.organizationId);
             setUser({
               email: newCheckResponse.data.email,
               fullName: newCheckResponse.data.fullName,
               locationId: newCheckResponse.data.locationId,
               locationName: newCheckResponse.data.locationName,
               roles: newCheckResponse.data.roles || [],
+              organizationId: newCheckResponse.data.organizationId,
             });
             setIsChecking(false);
             return;

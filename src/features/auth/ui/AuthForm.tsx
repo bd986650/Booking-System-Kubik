@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { InputField, OrganizationSelector } from "@/shared/ui";
-import { AuthButton } from "@/shared/ui/Buttons";
-import { organizationsApi, type Organization } from "@/features/auth";
+import { AuthButton } from "@/shared/ui/buttons";
+import { organizationsApi, type Organization, type Location } from "@/features/auth";
 
 interface AuthFormProps {
   mode: "login" | "register";
@@ -17,7 +17,7 @@ export interface AuthFormData {
   password: string;
   fullName?: string;
   position?: string;
-  location?: number;
+  locationId?: number;
   organizationId?: number;
   organizationName?: string;
 }
@@ -35,7 +35,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [password, setPassword] = useState("");
   const [position, setPosition] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Организации
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrganizationId, setSelectedOrganizationId] = useState<number | null>(null);
@@ -44,6 +44,12 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [isCreatingNewOrganization, setIsCreatingNewOrganization] = useState(false);
   const [organizationName, setOrganizationName] = useState("");
   const [registerStep, setRegisterStep] = useState<RegisterStep>("userData");
+
+  // Локации
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
+  const [locationsLoading, setLocationsLoading] = useState(false);
+  const [locationsError, setLocationsError] = useState<string | null>(null);
 
   const isLogin = mode === "login";
   const isRegister = mode === "register";
@@ -55,17 +61,27 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     }
   }, [isRegister, registerStep]);
 
+  // Загрузка локаций при выборе организации
+  useEffect(() => {
+    if (isRegister && selectedOrganizationId && !isCreatingNewOrganization) {
+      loadLocations(selectedOrganizationId);
+    } else {
+      setLocations([]);
+      setSelectedLocationId(null);
+    }
+  }, [isRegister, selectedOrganizationId, isCreatingNewOrganization]);
+
   const loadOrganizations = async () => {
     setOrganizationsLoading(true);
     setOrganizationsError(null);
-    
+
     try {
       const response = await organizationsApi.getAll();
       if (response.error) {
         // Если ошибка подключения, просто не показываем список, но позволяем создать новую
-        if (response.error.message.includes("Failed to fetch") || 
-            response.error.message.includes("ERR_CONNECTION_REFUSED") ||
-            response.error.message.includes("Сетевая ошибка")) {
+        if (response.error.message.includes("Failed to fetch") ||
+          response.error.message.includes("ERR_CONNECTION_REFUSED") ||
+          response.error.message.includes("Сетевая ошибка")) {
           setOrganizationsError("Сервер недоступен. Вы можете создать новую организацию.");
         } else {
           setOrganizationsError(response.error.message || "Ошибка загрузки организаций");
@@ -80,36 +96,61 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     }
   };
 
+  const loadLocations = async (orgId: number) => {
+    setLocationsLoading(true);
+    setLocationsError(null);
+    setSelectedLocationId(null);
+
+    try {
+      const response = await organizationsApi.getLocationsByOrganization(orgId);
+      if (response.error) {
+        setLocationsError(response.error.message || "Ошибка загрузки локаций");
+      } else if (response.data) {
+        setLocations(response.data);
+      }
+    } catch {
+      setLocationsError("Не удалось загрузить список локаций.");
+    } finally {
+      setLocationsLoading(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const formData: AuthFormData = {
       email,
       password,
     };
-    
+
     if (isRegister) {
       formData.fullName = fullName;
       formData.position = position || ""; // Обязательное поле
-      
+
       if (registerStep === "createOrganization") {
         // Создание новой организации
         formData.organizationName = organizationName;
         // organizationId не указываем (пустое)
+        // При создании новой организации локация не требуется
       } else {
         // Выбор существующей организации
         if (selectedOrganizationId) {
           formData.organizationId = selectedOrganizationId;
         }
+        // Обязательное указание локации для существующей организации
+        if (selectedLocationId) {
+          formData.locationId = selectedLocationId;
+        }
       }
     }
-    
+
     onSubmit(formData);
   };
 
   const handleOrganizationChange = (id: number | null) => {
     setSelectedOrganizationId(id);
     setIsCreatingNewOrganization(false);
+    setSelectedLocationId(null);
   };
 
   const handleCreateOrganization = () => {
@@ -133,11 +174,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   };
 
   // Проверка готовности к регистрации
-  // Если список организаций пуст (сервер недоступен), разрешаем создать новую
   const canRegister = isRegister && (
-    registerStep === "userData" 
-      ? selectedOrganizationId !== null || organizations.length === 0
-      : organizationName.trim() !== ""
+    registerStep === "createOrganization"
+      ? organizationName.trim() !== ""
+      : selectedOrganizationId !== null && (isCreatingNewOrganization || selectedLocationId !== null)
   );
 
   // Если создаем новую организацию и на шаге создания
@@ -220,16 +260,16 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         onTogglePassword={() => setShowPassword(!showPassword)}
       />
 
+      {isRegister && <InputField
+        label="Должность"
+        type="text"
+        value={position}
+        onChange={setPosition}
+        placeholder="Введите вашу должность"
+      />}
+
       {isRegister && (
         <>
-          <InputField
-            label="Должность"
-            type="text"
-            value={position}
-            onChange={setPosition}
-            placeholder="Введите вашу должность"
-          />
-
           <OrganizationSelector
             organizations={organizations}
             selectedOrganizationId={selectedOrganizationId}
@@ -238,17 +278,44 @@ export const AuthForm: React.FC<AuthFormProps> = ({
             isLoading={organizationsLoading}
             error={organizationsError}
           />
+
+          {selectedOrganizationId && !isCreatingNewOrganization && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Локация (офис) <span className="text-red-500">*</span>
+              </label>
+              {locationsLoading ? (
+                <div className="text-sm text-gray-500">Загрузка локаций...</div>
+              ) : locationsError ? (
+                <div className="text-sm text-red-600">{locationsError}</div>
+              ) : (
+                <select
+                  className="w-full h-10 sm:h-12 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedLocationId ?? ""}
+                  onChange={(e) => setSelectedLocationId(e.target.value ? Number(e.target.value) : null)}
+                  required
+                >
+                  <option value="">— выберите локацию —</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name} {loc.city ? `(${loc.city})` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
         </>
       )}
 
-      <AuthButton 
-        type="submit" 
+      <AuthButton
+        type="submit"
         disabled={isLoading || (isRegister && !canRegister && !isCreatingNewOrganization)}
       >
-        {isLoading 
-          ? "Загрузка..." 
-          : isLogin 
-            ? "Войти" 
+        {isLoading
+          ? "Загрузка..."
+          : isLogin
+            ? "Войти"
             : isCreatingNewOrganization
               ? "Далее"
               : "Зарегистрироваться"}

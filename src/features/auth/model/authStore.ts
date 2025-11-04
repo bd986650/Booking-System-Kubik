@@ -7,6 +7,7 @@ export interface User {
   locationId: number;
   locationName: string;
   roles: string[];
+  organizationId?: number;
 }
 
 interface AuthState {

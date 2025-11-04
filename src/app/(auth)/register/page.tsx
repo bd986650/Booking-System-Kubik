@@ -24,6 +24,12 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
+    // Проверка локации (обязательное поле только для существующей организации)
+    if (data.organizationId && !data.locationId) {
+      setError("Выберите локацию (офис)");
+      return;
+    }
+
     // Если создается новая организация, проверяем название
     if (data.organizationName && !data.organizationName.trim()) {
       setError("Введите название организации");
@@ -39,7 +45,7 @@ const RegisterPage: React.FC = () => {
         password: data.password,
         fullName: data.fullName,
         position: data.position,
-        location: data.location,
+        location: data.locationId,
         organizationId: data.organizationId,
         organizationName: data.organizationName,
       });
@@ -88,6 +94,7 @@ const RegisterPage: React.FC = () => {
               locationId: checkAuthResponse.data.locationId,
               locationName: checkAuthResponse.data.locationName,
               roles: checkAuthResponse.data.roles || loginResponse.data.role || [],
+              organizationId: checkAuthResponse.data.organizationId,
             });
 
             // Перенаправляем на главную страницу dashboard

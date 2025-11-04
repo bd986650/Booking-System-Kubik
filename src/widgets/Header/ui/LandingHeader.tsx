@@ -1,6 +1,6 @@
-import { Button } from "@/shared/ui/Buttons";
+import { Button } from "@/shared/ui/buttons";
 import Link from "next/link";
-import { LogoIcon } from "@/shared/ui/Branding";
+import { LogoIcon } from "@/shared/ui/branding";
 
 const LandingHeader: React.FC = () => {
     return (

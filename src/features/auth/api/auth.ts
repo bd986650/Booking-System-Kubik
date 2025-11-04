@@ -42,6 +42,7 @@ export interface CheckAuthResponse {
   locationId: number;
   locationName: string;
   roles: string[];
+  organizationId?: number;
 }
 
 // API функции
