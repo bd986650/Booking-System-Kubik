@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { UserRole, ROLE_LABELS } from "@/shared/types/user";
+import { UserRole, ROLE_LABELS } from "@/entities/user";
 
 interface RoleSelectorProps {
   selectedRole: UserRole;

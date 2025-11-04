@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useAuthStore } from "@/features/auth";
 import { usersApi } from "../api/users";
 import type { UserInfo, AssignRoleRequest } from "../model/types";
-import { UserRole, ROLE_LABELS } from "@/shared/types/user";
+import { UserRole, ROLE_LABELS } from "@/entities/user";
 import { canAssignRole, canManageUser, isProjectAdmin, getHighestRole } from "@/shared/lib/roles";
 
 export const UserManagement: React.FC = () => {
@@ -13,7 +13,10 @@ export const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingEmails, setProcessingEmails] = useState<Set<string>>(new Set());
-  const [confirmWorkspaceAdminEmail, setConfirmWorkspaceAdminEmail] = useState<string | null>(null);
+  const [confirmWorkspaceAdminEmail, setConfirmWorkspaceAdminEmail] = useState<string | null>(
+    null
+  );
+  const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
 
   // Проверяем права доступа
   const hasAdminAccess = user?.roles?.some(
@@ -148,6 +151,31 @@ export const UserManagement: React.FC = () => {
     }
 
     // Обновляем список пользователей после успешного отзыва роли
+    await fetchUsers();
+    setProcessingEmails((prev) => {
+      const next = new Set(prev);
+      next.delete(email);
+      return next;
+    });
+  };
+
+  const handleDeleteUser = async (email: string) => {
+    if (!accessToken) {
+      setError("Токен авторизации не найден");
+      return;
+    }
+
+    setProcessingEmails((prev) => new Set(prev).add(email));
+    const response = await usersApi.deleteUser(email, accessToken);
+    if (response.error) {
+      setError(response.error.message || "Ошибка при удалении пользователя");
+      setProcessingEmails((prev) => {
+        const next = new Set(prev);
+        next.delete(email);
+        return next;
+      });
+      return;
+    }
     await fetchUsers();
     setProcessingEmails((prev) => {
       const next = new Set(prev);
@@ -345,21 +373,42 @@ export const UserManagement: React.FC = () => {
                             {userRoles
                               .filter((role) => role !== "ROLE_USER")
                               .map((role) => (
-                              <button
-                                key={role}
-                                onClick={() => handleRevokeRole(rowUser.email, role)}
-                                disabled={isProcessing || !manageAllowed}
-                                className={`px-3 py-1.5 text-xs rounded border transition-colors ${
-                                  isProcessing || !manageAllowed
-                                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                                    : "bg-white text-red-600 border-red-300 hover:bg-red-50"
-                                }`}
-                              >
-                                Снять: {ROLE_LABELS[role as UserRole] || role}
-                              </button>
-                            ))}
+                                <button
+                                  key={role}
+                                  onClick={() => handleRevokeRole(rowUser.email, role)}
+                                  disabled={isProcessing || !manageAllowed}
+                                  className={`px-3 py-1.5 text-xs rounded border transition-colors ${
+                                    isProcessing || !manageAllowed
+                                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                      : "bg-white text-red-600 border-red-300 hover:bg-red-50"
+                                  }`}
+                                >
+                                  Снять: {ROLE_LABELS[role as UserRole] || role}
+                                </button>
+                              ))}
                           </div>
                         )}
+
+                        {/* Удаление пользователя */}
+                        {(() => {
+                          const isRowWorkspaceAdmin = userRoles.includes("ROLE_ADMIN_WORKSPACE");
+                          const canProjectAdminDelete = isProjectAdmin(user || null) && rowUser.locationId === (user?.locationId || -1) && !isRowWorkspaceAdmin;
+                          const canWorkspaceAdminDelete = (user?.roles || []).includes("ROLE_ADMIN_WORKSPACE");
+                          const canDelete = manageAllowed && (canWorkspaceAdminDelete || canProjectAdminDelete);
+                          return (
+                            <button
+                              onClick={() => setConfirmDeleteEmail(rowUser.email)}
+                              disabled={isProcessing || !canDelete}
+                              className={`px-3 py-2 text-xs rounded-md transition-colors font-semibold ${
+                                isProcessing || !canDelete
+                                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                                  : "bg-red-600 text-white hover:bg-red-700"
+                              }`}
+                            >
+                              Удалить пользователя
+                            </button>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>
@@ -394,6 +443,36 @@ export const UserManagement: React.FC = () => {
                 className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
               >
                 Назначить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteEmail && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Удалить пользователя</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Вы собираетесь полностью удалить пользователя <span className="font-semibold">{confirmDeleteEmail}</span> из системы.
+              Это действие необратимо.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDeleteEmail(null)}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  const email = confirmDeleteEmail;
+                  setConfirmDeleteEmail(null);
+                  await handleDeleteUser(email);
+                }}
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+              >
+                Удалить
               </button>
             </div>
           </div>

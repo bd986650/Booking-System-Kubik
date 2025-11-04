@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { UserRole } from "@/shared/types/user";
+import { UserRole } from "@/entities/user";
 import { useAuthStore } from "@/features/auth";
 import { LogoIcon } from "@/shared/ui/branding";
 import { Button } from "@/shared/ui/buttons";

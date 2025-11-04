@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { useAuthStore } from "@/features/auth";
-import { ROLE_LABELS, type UserRole } from "@/shared/types/user";
+import { ROLE_LABELS, type UserRole } from "@/entities/user";
 
 // Приоритет ролей (от высшего к низшему)
 const ROLE_PRIORITY: Record<UserRole, number> = {

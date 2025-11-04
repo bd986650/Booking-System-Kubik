@@ -223,7 +223,7 @@ export const Bookings: React.FC = () => {
             </div>
 
             {intervals.length === 0 ? (
-              <p className="text-gray-500">Выберите помещение и дату, затем нажмите "Показать интервалы".</p>
+              <p className="text-gray-500">Выберите помещение и дату, затем нажмите &quot;Показать интервалы&quot;.</p>
             ) : (
               <ul className="grid md:grid-cols-2 gap-3">
                 {intervals.map((it, idx) => (

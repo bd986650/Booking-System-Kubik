@@ -5,11 +5,10 @@ import { useAuthStore } from "@/features/auth";
 import { DashboardSidebar } from "@/widgets/Dashboard";
 import { AuthorizationRequests } from "@/features/authorization-requests";
 import { UserManagement } from "@/features/user-management";
-import { useAuthCheck } from "@/features/auth/hooks/useAuthCheck";
-import { useTokenRefresh } from "@/features/auth/hooks/useTokenRefresh";
+import { useAuthCheck, useTokenRefresh } from "@/features/auth";
 import { Bookings } from "@/features/booking";
-import { Workspaces } from "@/features/workspaces";
-import { Overview } from "@/features/overview";
+import { WorkspacesAdmin } from "@/widgets/WorkspacesAdmin";
+import { Overview } from "@/widgets/Overview";
 import { Profile } from "@/features/profile";
 
 type DashboardSection = 
@@ -52,7 +51,7 @@ export default function DashboardPage() {
       case "overview":
         return <Overview />;
       case "workspaces":
-        return <Workspaces />;
+        return <WorkspacesAdmin />;
       case "bookings":
         return <Bookings />;
       case "profile":

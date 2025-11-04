@@ -113,5 +113,31 @@ export const usersApi = {
       };
     }
   },
+
+  /**
+   * Удаление пользователя из организации
+   * DELETE /api/admin/users?email={email}
+   */
+  deleteUser: async (
+    email: string,
+    token: string
+  ): Promise<{ data?: void; error?: { message: string; status?: number } }> => {
+    try {
+      const endpoint = `/api/admin/users?email=${encodeURIComponent(email)}`;
+      const response = await authenticatedRequest<void>(endpoint, token, {
+        method: "DELETE",
+      });
+      if (response.error) {
+        return { error: response.error };
+      }
+      return { data: undefined };
+    } catch (error) {
+      return {
+        error: {
+          message: error instanceof Error ? error.message : "Неизвестная ошибка",
+        },
+      };
+    }
+  },
 };
 

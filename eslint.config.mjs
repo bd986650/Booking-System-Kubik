@@ -23,6 +23,18 @@ const eslintConfig = [
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
+      // Запрет глубоких импортов из чужих модулей (требуем импорт только из публичного API index.ts)
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            "@/features/*/*",
+            "@/features/*/*/*",
+            "@/widgets/*/*",
+            "@/widgets/*/*/*",
+          ],
+        },
+      ],
     },
   },
 ];
