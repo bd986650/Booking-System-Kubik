@@ -18,6 +18,7 @@ interface DashboardSidebarProps {
   userRoles: string[];
   activeSection: DashboardSection;
   onSectionChange: (section: DashboardSection) => void;
+  pendingRequestsCount?: number;
 }
 
 interface SidebarItem {
@@ -36,19 +37,19 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   },
   {
     id: "authorization-requests",
-    label: "Заявки на авторизацию",
+    label: "Заявки",
     icon: "📋",
     roles: ["ROLE_ADMIN_WORKSPACE"],
   },
   {
     id: "user-management",
-    label: "Управление пользователями",
+    label: "Пользователи",
     icon: "👥",
     roles: ["ROLE_ADMIN_PROJECT", "ROLE_ADMIN_WORKSPACE"],
   },
   {
     id: "workspaces",
-    label: "Рабочие пространства",
+    label: "Пространства",
     icon: "🏢",
     roles: ["ROLE_USER", "ROLE_ADMIN_PROJECT", "ROLE_ADMIN_WORKSPACE"],
   },
@@ -70,6 +71,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   userRoles,
   activeSection,
   onSectionChange,
+  pendingRequestsCount = 0,
 }) => {
   const { user, logout } = useAuthStore();
 
@@ -88,7 +90,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
       <div className="p-5 border-b border-gray-300">
         <div className="flex items-center gap-3 mb-4">
           <LogoIcon size={36} colorClass="text-blue-500" />
-          <div>
+        	  <div>
             <h2 className="text-lg font-extrabold text-gray-900">Кубик</h2>
             <p className="text-xs text-gray-500 font-medium">Система бронирования</p>
           </div>
@@ -109,18 +111,23 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
         <ul className="space-y-2">
           {visibleItems.map((item) => {
             const isActive = activeSection === item.id;
+            const showBadge = item.id === "authorization-requests" && pendingRequestsCount > 0;
             return (
               <li key={item.id}>
                 <button
                   onClick={() => onSectionChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-all duration-200 ${
                     isActive
                       ? "bg-blue-500 text-white shadow-md shadow-blue-500/20 font-semibold"
                       : "text-gray-700 hover:bg-gray-50 hover:text-blue-600 font-medium border border-transparent hover:border-gray-200"
                   }`}
                 >
-                  <span className="text-lg">{item.icon}</span>
-                  <span className="text-sm">{item.label}</span>
+                  <span className="text-sm whitespace-nowrap">{item.label}</span>
+                  {showBadge && (
+                    <span className="ml-3 inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-xs font-bold bg-red-500 text-white">
+                      {pendingRequestsCount}
+                    </span>
+                  )}
                 </button>
               </li>
             );
