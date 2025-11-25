@@ -6,6 +6,7 @@ import { bookingApi, type BookingItem } from "@/entities/booking";
 import { isProjectAdmin, isWorkspaceAdmin } from "@/shared/lib/roles";
 import { workspaceAdminApi } from "@/entities/location";
 import { ROLE_LABELS, type UserRole } from "@/entities/user";
+import { Button } from "@/shared/ui/buttons";
 
 export const Overview: React.FC = () => {
   const { user, accessToken } = useAuthStore();
@@ -61,84 +62,110 @@ export const Overview: React.FC = () => {
     load();
   }, [accessToken, adminProject, adminWorkspace, user?.locationId]);
 
-  const QuickAction: React.FC<React.PropsWithChildren<{ href: string }>> = ({ href, children }) => (
-    <a
-      href={href}
-      className="flex-1 min-w-[180px] px-4 py-3 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 text-center transition-all duration-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700"
-    >
-      {children}
-    </a>
-  );
-
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-6">Обзор</h1>
+      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Обзор</h1>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error}
+        </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-5 transition-all duration-200 hover:shadow-lg hover:border-blue-200 hover:-translate-y-0.5">
-          <h2 className="text-sm font-semibold text-gray-500 mb-3">Статус доступа</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-gray-500">Роль</span><span className="font-medium">{roleLabel}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Офис</span><span className="font-medium">{user?.locationName || "—"}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Email</span><span className="font-medium">{user?.email}</span></div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-300 p-6 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500 mb-4">Статус доступа</h2>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Роль</span>
+              <span className="font-semibold text-gray-900">{roleLabel}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Офис</span>
+              <span className="font-semibold text-gray-900">{user?.locationName || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Email</span>
+              <span className="font-semibold text-gray-900">{user?.email}</span>
+            </div>
           </div>
-          <div className="mt-4 h-px bg-gradient-to-r from-transparent via-blue-200/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
 
-        <div className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-5 transition-all duration-200 hover:shadow-lg hover:border-blue-200 hover:-translate-y-0.5">
-          <h2 className="text-sm font-semibold text-gray-500 mb-3">Быстрые действия</h2>
+        <div className="bg-white rounded-2xl border border-gray-300 p-6 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500 mb-4">Быстрые действия</h2>
           <div className="flex flex-wrap gap-3">
-            <QuickAction href="#">Создать бронь</QuickAction>
-            <QuickAction href="/map">Открыть карту офиса</QuickAction>
-            <QuickAction href="#bookings">Мои бронирования</QuickAction>
+            <a
+              href="#bookings"
+              className="flex-1 min-w-[140px] px-4 py-3 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 text-center transition-all duration-200 hover:bg-blue-50 hover:border-blue-500 hover:text-blue-600"
+            >
+              Создать бронь
+            </a>
+            <a
+              href="/map"
+              className="flex-1 min-w-[140px] px-4 py-3 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 text-center transition-all duration-200 hover:bg-blue-50 hover:border-blue-500 hover:text-blue-600"
+            >
+              Карта офиса
+            </a>
+            <a
+              href="#bookings"
+              className="flex-1 min-w-[140px] px-4 py-3 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 text-center transition-all duration-200 hover:bg-blue-50 hover:border-blue-500 hover:text-blue-600"
+            >
+              Мои бронирования
+            </a>
           </div>
-          <div className="mt-4 h-px bg-gradient-to-r from-transparent via-blue-200/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
 
-        <div className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-5 transition-all duration-200 hover:shadow-lg hover:border-blue-200 hover:-translate-y-0.5">
-          <h2 className="text-sm font-semibold text-gray-500 mb-3">Метрики</h2>
+        <div className="bg-white rounded-2xl border border-gray-300 p-6 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500 mb-4">Метрики</h2>
           {adminProject ? (
             <div className="text-sm">
-              <div className="flex justify-between"><span className="text-gray-500">Активные брони в офисе</span><span className="font-bold text-gray-900">{officeActiveCount ?? "—"}</span></div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Активные брони в офисе</span>
+                <span className="font-bold text-gray-900 text-lg">{officeActiveCount ?? "—"}</span>
+              </div>
             </div>
           ) : adminWorkspace ? (
             <div className="text-sm text-gray-600">Метрики по всей организации будут добавлены отдельно.</div>
           ) : (
             <div className="text-sm text-gray-600">Нет административных метрик для текущей роли.</div>
           )}
-          <div className="mt-4 h-px bg-gradient-to-r from-transparent via-blue-200/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
 
-      <div className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-5 mt-6 transition-all duration-200 hover:shadow-lg hover:border-blue-200">
-        <h2 className="text-sm font-semibold text-gray-500 mb-3">Мои ближайшие бронирования</h2>
+      <div className="bg-white rounded-2xl border border-gray-300 p-6 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-500 mb-4">Мои ближайшие бронирования</h2>
         {loading ? (
-          <div className="text-gray-500 text-sm">Загрузка...</div>
+          <div className="text-gray-500 text-sm py-4">Загрузка...</div>
         ) : upcoming.length === 0 ? (
-          <div className="text-gray-500 text-sm">Нет ближайших бронирований</div>
+          <div className="text-gray-500 text-sm py-4">Нет ближайших бронирований</div>
         ) : (
-          <ul className="divide-y">
+          <div className="space-y-3">
             {upcoming.map((b) => (
-              <li key={b.id} className="py-3 flex items-center justify-between transition-colors hover:bg-blue-50/40 rounded-lg px-2">
-                <div className="text-sm">
-                  <div className="font-semibold text-gray-900">{b.spaceName} · {b.locationName}</div>
-                  <div className="text-gray-500">{new Date(b.start).toLocaleString()} — {new Date(b.end).toLocaleString()}</div>
+              <div
+                key={b.id}
+                className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm text-gray-900 mb-1">
+                      {b.spaceName} · {b.locationName}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(b.start).toLocaleString("ru-RU")} — {new Date(b.end).toLocaleString("ru-RU")}
+                    </div>
+                  </div>
+                  <a
+                    href="#bookings"
+                    className="px-4 py-2 text-xs rounded-lg border border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-500 hover:text-blue-600 transition-all"
+                  >
+                    Подробнее
+                  </a>
                 </div>
-                <div className="flex gap-2">
-                  <a href="#bookings" className="px-3 py-1.5 text-xs rounded border border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors">Подробнее</a>
-                </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
   );
 };
-
-
-

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/features/auth";
 import { DashboardSidebar } from "@/widgets/Dashboard";
 import { AuthorizationRequests } from "@/features/authorization-requests";
@@ -22,7 +23,16 @@ type DashboardSection =
 
 export default function DashboardPage() {
   const { user, accessToken } = useAuthStore();
+  const searchParams = useSearchParams();
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
+
+  // Поддержка URL параметра section
+  useEffect(() => {
+    const sectionParam = searchParams.get("section");
+    if (sectionParam && ["overview", "authorization-requests", "user-management", "workspaces", "bookings", "profile"].includes(sectionParam)) {
+      setActiveSection(sectionParam as DashboardSection);
+    }
+  }, [searchParams]);
   const { isChecking } = useAuthCheck();
   
   // Автоматическое обновление токена

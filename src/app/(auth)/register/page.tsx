@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthLayout } from "@/shared/ui";
 import { AuthForm, AuthFormData, authApi, useAuthStore } from "@/features/auth";
+import { logger } from "@/shared/lib/logger";
 
 const RegisterPage: React.FC = () => {
   const router = useRouter();
@@ -85,8 +86,10 @@ const RegisterPage: React.FC = () => {
           );
 
           if (checkAuthResponse.data) {
-            console.log("[Register] Roles from checkAuth:", checkAuthResponse.data.roles);
-            console.log("[Register] Roles from login response:", loginResponse.data.role);
+            logger.debug("Register: Roles from checkAuth", {
+              checkAuthRoles: checkAuthResponse.data.roles,
+              loginResponseRoles: loginResponse.data.role,
+            });
             
             setUser({
               email: checkAuthResponse.data.email,
@@ -102,7 +105,9 @@ const RegisterPage: React.FC = () => {
             return;
           } else {
             // Если не удалось получить данные пользователя, используем роли из ответа логина
-            console.log("[Register] Using roles from login response:", loginResponse.data.role);
+            logger.debug("Register: Using roles from login response", {
+              roles: loginResponse.data.role,
+            });
             setUser({
               email: data.email,
               fullName: data.fullName,
@@ -126,7 +131,7 @@ const RegisterPage: React.FC = () => {
       }
     } catch (err) {
       setError("Произошла ошибка при регистрации. Попробуйте снова.");
-      console.error("Register error:", err);
+      logger.error("Register error", err);
     } finally {
       setIsLoading(false);
     }

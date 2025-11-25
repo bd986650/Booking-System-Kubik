@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthLayout } from "@/shared/ui";
 import { AuthForm, AuthFormData, authApi, useAuthStore } from "@/features/auth";
+import { logger } from "@/shared/lib/logger";
 
 const LoginPage: React.FC = () => {
   const router = useRouter();
@@ -72,8 +73,10 @@ const LoginPage: React.FC = () => {
         );
 
         if (checkAuthResponse.data) {
-          console.log("[Login] Roles from checkAuth:", checkAuthResponse.data.roles);
-          console.log("[Login] Roles from login response:", response.data.role);
+          logger.debug("Login: Roles from checkAuth", {
+            checkAuthRoles: checkAuthResponse.data.roles,
+            loginResponseRoles: response.data.role,
+          });
           
           setUser({
             email: checkAuthResponse.data.email,
@@ -88,7 +91,9 @@ const LoginPage: React.FC = () => {
           router.push("/dashboard");
         } else {
           // Если не удалось получить данные пользователя, используем роли из ответа логина
-          console.log("[Login] Using roles from login response:", response.data.role);
+          logger.debug("Login: Using roles from login response", {
+            roles: response.data.role,
+          });
           setUser({
             email: data.email,
             fullName: "",
@@ -101,7 +106,7 @@ const LoginPage: React.FC = () => {
       }
     } catch (err) {
       setError("Произошла ошибка при входе. Попробуйте снова.");
-      console.error("Login error:", err);
+      logger.error("Login error", err);
     } finally {
       setIsLoading(false);
     }

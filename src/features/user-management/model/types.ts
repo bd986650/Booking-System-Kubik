@@ -1,8 +1,12 @@
+// 3.5 Получить всех пользователей (админ)
+// GET /api/admin/users
 export interface UserInfo {
   email: string;
   fullName: string;
   locationId: number;
   locationName: string;
+  organizationId?: number;
+  organizationName?: string;
   roles: string[];
 }
 

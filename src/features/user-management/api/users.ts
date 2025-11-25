@@ -1,5 +1,6 @@
 import { authenticatedRequest } from "@/shared/api/config";
 import type { UserInfo, AssignRoleRequest, RevokeRoleRequest } from "../model/types";
+import { logger } from "@/shared/lib/logger";
 
 export const usersApi = {
   /**
@@ -11,7 +12,7 @@ export const usersApi = {
     error?: { message: string; status?: number };
   }> => {
     try {
-      console.log("[usersApi.getAllUsers] Making request with token:", {
+      logger.debug("usersApi.getAllUsers: Making request", {
         hasToken: !!token,
         tokenLength: token?.length,
       });
@@ -22,7 +23,7 @@ export const usersApi = {
         { method: "GET" }
       );
 
-      console.log("[usersApi.getAllUsers] Response:", {
+      logger.debug("usersApi.getAllUsers: Response", {
         hasData: !!response.data,
         hasError: !!response.error,
         errorStatus: response.error?.status,
@@ -35,7 +36,7 @@ export const usersApi = {
 
       return { data: response.data };
     } catch (error) {
-      console.error("[usersApi.getAllUsers] Exception:", error);
+      logger.error("usersApi.getAllUsers: Exception", error);
       return {
         error: {
           message: error instanceof Error ? error.message : "Неизвестная ошибка",

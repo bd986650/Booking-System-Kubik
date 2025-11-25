@@ -9,6 +9,7 @@ interface UseRoomInteractionParams {
   rooms: Room[];
   currentFloor: string;
   setFloors: React.Dispatch<React.SetStateAction<Record<string, Room[]>>>;
+  editMode?: boolean;
 }
 
 export const useRoomInteraction = ({
@@ -18,6 +19,7 @@ export const useRoomInteraction = ({
   rooms: _rooms,
   currentFloor,
   setFloors,
+  editMode = true,
 }: UseRoomInteractionParams) => {
   const [selectedRoomId, setSelectedRoomId] = useState<ID | null>(null);
   const [isMovingRoom, setIsMovingRoom] = useState(false);
@@ -26,6 +28,7 @@ export const useRoomInteraction = ({
   const [resizeRoomId, setResizeRoomId] = useState<ID | null>(null);
 
   const startMoveRoom = (e: React.MouseEvent, room: Room) => {
+    if (!editMode) return; // В режиме просмотра не перемещаем
     e.stopPropagation();
     setSelectedRoomId(room.id);
     setIsMovingRoom(true);
@@ -63,6 +66,7 @@ export const useRoomInteraction = ({
   };
 
   const startResize = (e: React.MouseEvent, room: Room) => {
+    if (!editMode) return; // В режиме просмотра не изменяем размер
     e.stopPropagation();
     setResizeRoomId(room.id);
     setIsResizing(true);

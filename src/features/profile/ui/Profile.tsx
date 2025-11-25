@@ -48,23 +48,23 @@ export const Profile: React.FC = () => {
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-6">Профиль</h1>
+      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Профиль</h1>
 
-      <div className="bg-white rounded-lg shadow border border-gray-300 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-8 py-6">
+      <div className="bg-white rounded-2xl border border-gray-300 overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-8 py-8">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
-              <span className="text-3xl">👤</span>
+              <span className="text-2xl font-bold text-white">{(user.fullName || user.email)[0].toUpperCase()}</span>
             </div>
             <div>
               <h2 className="text-2xl font-bold text-white">{user.fullName}</h2>
-              <p className="text-blue-100 text-sm">{user.email}</p>
+              <p className="text-blue-100 text-sm mt-1">{user.email}</p>
             </div>
           </div>
         </div>
 
         <div className="p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Основная информация */}
             <div className="space-y-6">
               <div>
@@ -72,12 +72,12 @@ export const Profile: React.FC = () => {
                   Основная информация
                 </h3>
                 <div className="space-y-4">
-                  <div className="flex flex-col">
-                    <label className="text-xs font-medium text-gray-500 mb-1">ФИО</label>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">ФИО</label>
                     <p className="text-base font-semibold text-gray-900">{user.fullName}</p>
                   </div>
-                  <div className="flex flex-col">
-                    <label className="text-xs font-medium text-gray-500 mb-1">Email</label>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Email</label>
                     <p className="text-base font-semibold text-gray-900">{user.email}</p>
                   </div>
                 </div>
@@ -89,14 +89,14 @@ export const Profile: React.FC = () => {
                   Локация
                 </h3>
                 <div className="space-y-4">
-                  <div className="flex flex-col">
-                    <label className="text-xs font-medium text-gray-500 mb-1">Название офиса</label>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Название офиса</label>
                     <p className="text-base font-semibold text-gray-900">
                       {user.locationName || "Не указано"}
                     </p>
                   </div>
-                  <div className="flex flex-col">
-                    <label className="text-xs font-medium text-gray-500 mb-1">ID локации</label>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">ID локации</label>
                     <p className="text-base font-semibold text-gray-900">{user.locationId || "Не указано"}</p>
                   </div>
                 </div>
@@ -138,4 +138,3 @@ export const Profile: React.FC = () => {
     </div>
   );
 };
-

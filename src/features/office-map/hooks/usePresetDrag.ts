@@ -12,6 +12,7 @@ interface UsePresetDragParams {
   currentFloor: string;
   setFloors: React.Dispatch<React.SetStateAction<Record<string, Room[]>>>;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
+  editMode?: boolean;
 }
 
 export const usePresetDrag = ({
@@ -23,11 +24,13 @@ export const usePresetDrag = ({
   currentFloor,
   setFloors,
   wrapperRef,
+  editMode = true,
 }: UsePresetDragParams) => {
   const [draggingPreset, setDraggingPreset] = useState<Preset | null>(null);
   const [draggingPresetPos, setDraggingPresetPos] = useState<{ x: number; y: number } | null>(null);
 
   const startDragPreset = (preset: Preset, clientX: number, clientY: number) => {
+    if (!editMode) return; // В режиме просмотра не перетаскиваем
     setDraggingPreset(preset);
     setDraggingPresetPos({ x: clientX, y: clientY });
   };

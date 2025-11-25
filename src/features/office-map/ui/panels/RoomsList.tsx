@@ -1,5 +1,6 @@
 import React from "react";
 import type { Room, ID } from "../../model/types";
+import type { SpaceType } from "@/entities/booking";
 
 interface RoomsListProps {
   rooms: Room[];
@@ -7,6 +8,11 @@ interface RoomsListProps {
   onSelectRoom: (id: ID) => void;
   onRenameRoom: (id: ID, newName: string) => void;
   onDeleteRoom: (id: ID) => void;
+  spaceTypes?: SpaceType[];
+  roomSpaceTypes?: Record<string, number>;
+  roomCapacities?: Record<string, number>;
+  onSpaceTypeChange?: (roomId: ID, spaceTypeId: number) => void;
+  onCapacityChange?: (roomId: ID, capacity: number) => void;
 }
 
 export const RoomsList: React.FC<RoomsListProps> = ({
@@ -15,6 +21,11 @@ export const RoomsList: React.FC<RoomsListProps> = ({
   onSelectRoom,
   onRenameRoom,
   onDeleteRoom,
+  spaceTypes = [],
+  roomSpaceTypes = {},
+  roomCapacities = {},
+  onSpaceTypeChange,
+  onCapacityChange,
 }) => {
   return (
     <div className="w-80 flex flex-col">
@@ -42,13 +53,49 @@ export const RoomsList: React.FC<RoomsListProps> = ({
                 }`}
                 onClick={() => onSelectRoom(room.id)}
               >
-                <div className="flex flex-col">
+                <div className="flex flex-col flex-1">
                   <span className="font-medium text-gray-800 group-hover:text-blue-600 transition-colors duration-200">
                     {room.name}
                   </span>
                   <span className="text-xs text-gray-500">
                     {Math.round(room.width)}×{Math.round(room.height)}
                   </span>
+                  {spaceTypes.length > 0 && (
+                    <div className="mt-1 flex gap-2">
+                      <select
+                        className="text-xs border rounded px-2 py-1"
+                        value={roomSpaceTypes[room.id] || ""}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          if (onSpaceTypeChange) {
+                            onSpaceTypeChange(room.id, Number(e.target.value));
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <option value="">Тип...</option>
+                        {spaceTypes.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.type}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        className="text-xs border rounded px-2 py-1 w-16"
+                        placeholder="Вместимость"
+                        value={roomCapacities[room.id] || ""}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          if (onCapacityChange) {
+                            onCapacityChange(room.id, Number(e.target.value) || 1);
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        min="1"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">

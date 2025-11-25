@@ -6,6 +6,14 @@ import { usersApi } from "../api/users";
 import type { UserInfo, AssignRoleRequest } from "../model/types";
 import { UserRole, ROLE_LABELS } from "@/entities/user";
 import { canAssignRole, canManageUser, isProjectAdmin, getHighestRole } from "@/shared/lib/roles";
+import { logger } from "@/shared/lib/logger";
+import { adminApi } from "@/entities/admin";
+import { bookingApi } from "@/entities/booking";
+import type { BookingItem, SpaceType, SpaceItem, TimeIntervalItem } from "@/entities/booking";
+import { showSuccessToast, showErrorToast } from "@/shared/lib/toast";
+import { UserBookingsSection } from "./UserBookingsSection";
+import { Button } from "@/shared/ui/buttons";
+import { processIntervals } from "@/features/booking/lib/intervalUtils";
 
 export const UserManagement: React.FC = () => {
   const { accessToken, user } = useAuthStore();
@@ -17,6 +25,20 @@ export const UserManagement: React.FC = () => {
     null
   );
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState<string | null>(null);
+  
+  // Состояния для управления бронированиями пользователей
+  const [expandedUserEmail, setExpandedUserEmail] = useState<string | null>(null);
+  const [userBookings, setUserBookings] = useState<Record<string, BookingItem[]>>({});
+  const [userActiveBookings, setUserActiveBookings] = useState<Record<string, BookingItem[]>>({});
+  const [loadingBookings, setLoadingBookings] = useState<Record<string, boolean>>({});
+  
+  // Состояния для создания бронирования от имени пользователя
+  const [creatingBookingFor, setCreatingBookingFor] = useState<string | null>(null);
+  const [spaceTypes, setSpaceTypes] = useState<SpaceType[]>([]);
+  const [spaces, setSpaces] = useState<SpaceItem[]>([]);
+  const [selectedSpaceId, setSelectedSpaceId] = useState<number | null>(null);
+  const [bookingDate, setBookingDate] = useState<string>("");
+  const [bookingIntervals, setBookingIntervals] = useState<TimeIntervalItem[]>([]);
 
   // Проверяем права доступа
   const hasAdminAccess = user?.roles?.some(
@@ -26,8 +48,10 @@ export const UserManagement: React.FC = () => {
   // Отладочная информация
   useEffect(() => {
     if (user) {
-      console.log("[UserManagement] User roles:", user.roles);
-      console.log("[UserManagement] Has admin access:", hasAdminAccess);
+      logger.debug("UserManagement: User roles", {
+        roles: user.roles,
+        hasAdminAccess,
+      });
     }
   }, [user, hasAdminAccess]);
 
@@ -38,7 +62,7 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
-    console.log("[UserManagement.fetchUsers] Starting fetch", {
+    logger.debug("UserManagement: Starting fetch users", {
       hasToken: !!accessToken,
       userRoles: user?.roles,
       hasAdminAccess,
@@ -80,6 +104,131 @@ export const UserManagement: React.FC = () => {
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  // Загружаем типы пространств при монтировании
+  useEffect(() => {
+    if (!user?.locationId || !accessToken) return;
+    (async () => {
+      const res = await bookingApi.getSpaceTypes(user.locationId, accessToken);
+      if (res.data) setSpaceTypes(res.data);
+    })();
+  }, [user?.locationId, accessToken]);
+
+  // Функция для загрузки бронирований пользователя
+  const loadUserBookings = async (email: string) => {
+    if (!accessToken) return;
+    
+    setLoadingBookings((prev) => ({ ...prev, [email]: true }));
+    
+    try {
+      const [activeRes, allRes] = await Promise.all([
+        adminApi.getUserActiveBookings(email, accessToken),
+        adminApi.getUserAllBookings(email, accessToken),
+      ]);
+      
+      if (activeRes.data) {
+        setUserActiveBookings((prev) => ({ ...prev, [email]: activeRes.data || [] }));
+      }
+      if (allRes.data) {
+        setUserBookings((prev) => ({ ...prev, [email]: allRes.data || [] }));
+      }
+    } catch (err) {
+      showErrorToast(
+        err instanceof Error ? err.message : "Ошибка загрузки бронирований",
+        "Ошибка"
+      );
+    } finally {
+      setLoadingBookings((prev) => ({ ...prev, [email]: false }));
+    }
+  };
+
+  // Функция для создания бронирования от имени пользователя
+  const handleCreateBookingForUser = async (userEmail: string, start: string, end: string, spaceTypeIdForBooking?: number) => {
+    if (!accessToken || !selectedSpaceId || creatingBookingFor === userEmail) return;
+    
+    setCreatingBookingFor(userEmail);
+    
+    try {
+      const spaceType = spaceTypes.find((t) => t.id === spaceTypeIdForBooking);
+      const bookingType = spaceType?.type || "MEETING";
+      
+      const res = await adminApi.createBookingForUser(
+        {
+          userEmail,
+          spaceId: selectedSpaceId,
+          type: bookingType,
+          start,
+          end,
+        },
+        accessToken
+      );
+      
+      if (res.error) {
+        showErrorToast(res.error.message, "Ошибка создания бронирования");
+      } else if (res.data) {
+        showSuccessToast(
+          `Бронирование создано для ${userEmail}: ${res.data.spaceName} на ${new Date(res.data.start).toLocaleString()}`,
+          "Бронирование создано"
+        );
+        
+        // Обновляем бронирования пользователя
+        await loadUserBookings(userEmail);
+        
+        // Очищаем форму
+        setSelectedSpaceId(null);
+        setBookingDate("");
+        setBookingIntervals([]);
+        setSpaces([]);
+      }
+    } catch (err) {
+      showErrorToast(
+        err instanceof Error ? err.message : "Неизвестная ошибка",
+        "Ошибка создания бронирования"
+      );
+    } finally {
+      setCreatingBookingFor(null);
+    }
+  };
+
+  // Функция для фильтрации пространств
+  const handleFilterSpacesForUser = async (locationId: number, spaceTypeId: number, floorNumber?: number) => {
+    if (!accessToken) {
+      showErrorToast("Токен авторизации не найден", "Ошибка");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await bookingApi.filterSpaces({
+        locationId,
+        spaceTypeId,
+        floorNumber,
+      }, accessToken);
+      if (res.data) setSpaces(res.data);
+      if (res.error) showErrorToast(res.error.message, "Ошибка");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Функция для загрузки интервалов
+  const handleLoadIntervalsForUser = async (date: string, spaceId: number) => {
+    if (!accessToken) {
+      showErrorToast("Токен авторизации не найден", "Ошибка");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await bookingApi.getTimeIntervals({ date, spaceId }, accessToken);
+      if (res.data) {
+        // Разбиваем большие интервалы на мелкие с учетом availableDurations
+        const processedIntervals = processIntervals(res.data);
+        setBookingIntervals(processedIntervals);
+      }
+      if (res.error) showErrorToast(res.error.message, "Ошибка");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAssignRole = async (email: string, role: UserRole) => {
     if (!accessToken) {
@@ -226,18 +375,20 @@ export const UserManagement: React.FC = () => {
 
   return (
     <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Управление пользователями</h1>
-        <button
+      <div className="mb-8 flex items-center justify-between">
+        <h1 className="text-3xl font-extrabold text-gray-900">Управление пользователями</h1>
+        <Button
           onClick={fetchUsers}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          variant="filled"
+          color="blue"
+          className="min-w-[120px]"
         >
           Обновить
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
           <div className="font-semibold mb-1">Ошибка:</div>
           <div>{error}</div>
           {error.includes("403") && user && (
@@ -265,27 +416,27 @@ export const UserManagement: React.FC = () => {
       )}
 
       {users.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
+        <div className="bg-white rounded-2xl border border-gray-300 p-8 text-center transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
           <p className="text-gray-500">Пользователи не найдены</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-300 overflow-hidden transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   ФИО
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Локация
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Роли
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Действия
                 </th>
               </tr>
@@ -297,121 +448,170 @@ export const UserManagement: React.FC = () => {
                 const manageAllowed = canManageUser(user || null, { locationId: rowUser.locationId });
 
                 return (
-                  <tr key={rowUser.email} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {rowUser.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {rowUser.fullName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {rowUser.locationName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {(() => {
-                        const highest = getHighestRole(userRoles);
-                        if (!highest) return <span className="text-xs text-gray-500">нет ролей</span>;
-                        const isAdmin = highest === "ROLE_ADMIN_WORKSPACE" || highest === "ROLE_ADMIN_PROJECT";
-                        return (
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              isAdmin ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            {ROLE_LABELS[highest]}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex flex-col gap-3">
-                        {/* Спец-действие: назначить единственного администратора воркспейса */}
-                        <div>
-                          <button
-                            onClick={() => setConfirmWorkspaceAdminEmail(rowUser.email)}
-                            disabled={
-                              isProcessing || !manageAllowed || !canAssignRole(user || null, "ROLE_ADMIN_WORKSPACE") ||
-                              userRoles.includes("ROLE_ADMIN_WORKSPACE")
-                            }
-                            className={`px-3 py-2 text-xs rounded-md transition-colors font-semibold ${
-                              isProcessing || !manageAllowed || userRoles.includes("ROLE_ADMIN_WORKSPACE")
-                                ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                                : "bg-blue-600 text-white hover:bg-blue-700"
-                            }`}
-                          >
-                            Сделать админом воркспейса
-                          </button>
-                        </div>
-
-                        {/* Быстрые назначения ролей */}
-                        <div className="flex flex-wrap gap-2">
-                          {(["ROLE_ADMIN_PROJECT", "ROLE_USER"] as UserRole[]).map((role) => {
-                            const hasRole = userRoles.includes(role);
-                            const roleAllowed = canAssignRole(user || null, role);
-                            const disabled = hasRole || isProcessing || !manageAllowed || !roleAllowed;
-                            return (
-                              <button
-                                key={role}
-                                onClick={() => handleAssignRole(rowUser.email, role)}
-                                disabled={disabled}
-                                className={`px-3 py-1.5 text-xs rounded border transition-colors ${
-                                  disabled
-                                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                                }`}
-                              >
-                                {hasRole ? "✓ " : "+ "}
-                                {ROLE_LABELS[role]}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Снятие ролей */}
-                        {userRoles.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {userRoles
-                              .filter((role) => role !== "ROLE_USER")
-                              .map((role) => (
-                                <button
-                                  key={role}
-                                  onClick={() => handleRevokeRole(rowUser.email, role)}
-                                  disabled={isProcessing || !manageAllowed}
-                                  className={`px-3 py-1.5 text-xs rounded border transition-colors ${
-                                    isProcessing || !manageAllowed
-                                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                                      : "bg-white text-red-600 border-red-300 hover:bg-red-50"
-                                  }`}
-                                >
-                                  Снять: {ROLE_LABELS[role as UserRole] || role}
-                                </button>
-                              ))}
-                          </div>
-                        )}
-
-                        {/* Удаление пользователя */}
+                  <React.Fragment key={rowUser.email}>
+                    <tr className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {rowUser.email}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {rowUser.fullName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {rowUser.locationName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         {(() => {
-                          const isRowWorkspaceAdmin = userRoles.includes("ROLE_ADMIN_WORKSPACE");
-                          const canProjectAdminDelete = isProjectAdmin(user || null) && rowUser.locationId === (user?.locationId || -1) && !isRowWorkspaceAdmin;
-                          const canWorkspaceAdminDelete = (user?.roles || []).includes("ROLE_ADMIN_WORKSPACE");
-                          const canDelete = manageAllowed && (canWorkspaceAdminDelete || canProjectAdminDelete);
+                          const highest = getHighestRole(userRoles);
+                          if (!highest) return <span className="text-xs text-gray-500">нет ролей</span>;
+                          const isAdmin = highest === "ROLE_ADMIN_WORKSPACE" || highest === "ROLE_ADMIN_PROJECT";
                           return (
-                            <button
-                              onClick={() => setConfirmDeleteEmail(rowUser.email)}
-                              disabled={isProcessing || !canDelete}
-                              className={`px-3 py-2 text-xs rounded-md transition-colors font-semibold ${
-                                isProcessing || !canDelete
-                                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                                  : "bg-red-600 text-white hover:bg-red-700"
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                isAdmin ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
                               }`}
                             >
-                              Удалить пользователя
-                            </button>
+                              {ROLE_LABELS[highest]}
+                            </span>
                           );
                         })()}
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1.5 min-w-[200px]">
+                          {/* Спец-действие: назначить единственного администратора воркспейса */}
+                          {canAssignRole(user || null, "ROLE_ADMIN_WORKSPACE") && !userRoles.includes("ROLE_ADMIN_WORKSPACE") && (
+                            <button
+                              onClick={() => setConfirmWorkspaceAdminEmail(rowUser.email)}
+                              disabled={isProcessing || !manageAllowed}
+                              className={`text-[10px] px-2 py-1 rounded border transition-all ${
+                                isProcessing || !manageAllowed
+                                  ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                  : "bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100 font-medium"
+                              }`}
+                            >
+                              Админ воркспейса
+                            </button>
+                          )}
+
+                          {/* Группа: Назначение ролей */}
+                          <div className="flex flex-wrap gap-1">
+                            {(["ROLE_ADMIN_PROJECT", "ROLE_USER"] as UserRole[]).map((role) => {
+                              const hasRole = userRoles.includes(role);
+                              const roleAllowed = canAssignRole(user || null, role);
+                              const disabled = hasRole || isProcessing || !manageAllowed || !roleAllowed;
+                              return (
+                                <button
+                                  key={role}
+                                  onClick={() => handleAssignRole(rowUser.email, role)}
+                                  disabled={disabled}
+                                  className={`text-[10px] px-2 py-0.5 rounded border transition-all ${
+                                    disabled
+                                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                      : hasRole
+                                      ? "bg-blue-100 text-blue-800 border-blue-300 font-medium"
+                                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                                  }`}
+                                >
+                                  {hasRole ? "✓ " : "+ "}
+                                  {ROLE_LABELS[role] === "Обычный пользователь" ? "Пользователь" : ROLE_LABELS[role] === "Администратор проекта" ? "Админ проекта" : ROLE_LABELS[role]}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Группа: Снятие ролей */}
+                          {userRoles.filter((role) => role !== "ROLE_USER").length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {userRoles
+                                .filter((role) => role !== "ROLE_USER")
+                                .map((role) => (
+                                  <button
+                                    key={role}
+                                    onClick={() => handleRevokeRole(rowUser.email, role)}
+                                    disabled={isProcessing || !manageAllowed}
+                                    className={`text-[10px] px-2 py-0.5 rounded border transition-all ${
+                                      isProcessing || !manageAllowed
+                                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                        : "bg-white text-red-600 border-red-300 hover:bg-red-50"
+                                    }`}
+                                  >
+                                    − {ROLE_LABELS[role as UserRole] === "Администратор проекта" ? "Админ проекта" : ROLE_LABELS[role as UserRole] === "Администратор рабочего пространства" ? "Админ воркспейса" : ROLE_LABELS[role as UserRole]}
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+
+                          {/* Группа: Действия */}
+                          <div className="flex flex-wrap gap-1 pt-0.5 border-t border-gray-200">
+                            <button
+                              onClick={() => {
+                                if (expandedUserEmail === rowUser.email) {
+                                  setExpandedUserEmail(null);
+                                } else {
+                                  setExpandedUserEmail(rowUser.email);
+                                  loadUserBookings(rowUser.email);
+                                }
+                              }}
+                              disabled={isProcessing || !manageAllowed}
+                              className={`text-[10px] px-2 py-0.5 rounded border transition-all ${
+                                isProcessing || !manageAllowed
+                                  ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                  : expandedUserEmail === rowUser.email
+                                  ? "bg-blue-100 text-blue-800 border-blue-300 font-medium"
+                                  : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                              }`}
+                            >
+                              {expandedUserEmail === rowUser.email ? "Скрыть" : "Брони"}
+                            </button>
+                            {(() => {
+                              const isRowWorkspaceAdmin = userRoles.includes("ROLE_ADMIN_WORKSPACE");
+                              const canProjectAdminDelete = isProjectAdmin(user || null) && rowUser.locationId === (user?.locationId || -1) && !isRowWorkspaceAdmin;
+                              const canWorkspaceAdminDelete = (user?.roles || []).includes("ROLE_ADMIN_WORKSPACE");
+                              const canDelete = manageAllowed && (canWorkspaceAdminDelete || canProjectAdminDelete);
+                              return (
+                                <button
+                                  onClick={() => setConfirmDeleteEmail(rowUser.email)}
+                                  disabled={isProcessing || !canDelete}
+                                  className={`text-[10px] px-2 py-0.5 rounded border transition-all ${
+                                    isProcessing || !canDelete
+                                      ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                                      : "bg-white text-red-600 border-red-300 hover:bg-red-50 font-medium"
+                                  }`}
+                                >
+                                  Удалить
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedUserEmail === rowUser.email && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-4 bg-gray-50">
+                          <UserBookingsSection
+                            userEmail={rowUser.email}
+                            userLocationId={rowUser.locationId}
+                            activeBookings={userActiveBookings[rowUser.email] || []}
+                            allBookings={userBookings[rowUser.email] || []}
+                            loading={loadingBookings[rowUser.email] || false}
+                            spaceTypes={spaceTypes}
+                            spaces={spaces}
+                            selectedSpaceId={selectedSpaceId}
+                            setSelectedSpaceId={setSelectedSpaceId}
+                            bookingDate={bookingDate}
+                            setBookingDate={setBookingDate}
+                            intervals={bookingIntervals}
+                            onFilterSpaces={handleFilterSpacesForUser}
+                            onLoadIntervals={handleLoadIntervalsForUser}
+                            onCreateBooking={handleCreateBookingForUser}
+                            creatingBooking={creatingBookingFor === rowUser.email}
+                            accessToken={accessToken || ""}
+                            setSpaces={setSpaces}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -421,29 +621,33 @@ export const UserManagement: React.FC = () => {
 
       {confirmWorkspaceAdminEmail && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Переназначить администратора воркспейса</h3>
-            <p className="text-sm text-gray-600 mb-4">
+          <div className="bg-white rounded-2xl border border-gray-300 shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Переназначить администратора воркспейса</h3>
+            <p className="text-sm text-gray-600 mb-6">
               Вы собираетесь назначить пользователя <span className="font-semibold">{confirmWorkspaceAdminEmail}</span> единственным администратором
               воркспейса. Текущее ограничение — один администратор воркспейса на проект: права будут переназначены.
             </p>
             <div className="flex gap-3 justify-end">
-              <button
+              <Button
                 onClick={() => setConfirmWorkspaceAdminEmail(null)}
-                className="px-4 py-2 rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                variant="outline"
+                color="gray"
+                className="min-w-[100px]"
               >
                 Отмена
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={async () => {
                   const email = confirmWorkspaceAdminEmail;
                   setConfirmWorkspaceAdminEmail(null);
                   await handleAssignRole(email, "ROLE_ADMIN_WORKSPACE");
                 }}
-                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                variant="filled"
+                color="blue"
+                className="min-w-[100px]"
               >
                 Назначить
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -451,29 +655,33 @@ export const UserManagement: React.FC = () => {
 
       {confirmDeleteEmail && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Удалить пользователя</h3>
-            <p className="text-sm text-gray-600 mb-4">
+          <div className="bg-white rounded-2xl border border-gray-300 shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Удалить пользователя</h3>
+            <p className="text-sm text-gray-600 mb-6">
               Вы собираетесь полностью удалить пользователя <span className="font-semibold">{confirmDeleteEmail}</span> из системы.
               Это действие необратимо.
             </p>
             <div className="flex gap-3 justify-end">
-              <button
+              <Button
                 onClick={() => setConfirmDeleteEmail(null)}
-                className="px-4 py-2 rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                variant="outline"
+                color="gray"
+                className="min-w-[100px]"
               >
                 Отмена
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={async () => {
                   const email = confirmDeleteEmail;
                   setConfirmDeleteEmail(null);
                   await handleDeleteUser(email);
                 }}
-                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+                variant="filled"
+                color="gray"
+                className="min-w-[100px] bg-red-600 hover:bg-red-700 text-white"
               >
                 Удалить
-              </button>
+              </Button>
             </div>
           </div>
         </div>

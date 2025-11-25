@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { InputField, OrganizationSelector } from "@/shared/ui";
 import { AuthButton } from "@/shared/ui/buttons";
 import { organizationsApi, type Organization, type Location } from "@/features/auth";
+import { loginSchema, registerSchema, type LoginFormData, type RegisterFormData } from "../lib/validation";
 
 interface AuthFormProps {
   mode: "login" | "register";
@@ -30,11 +33,8 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   onSwitchMode,
   isLoading = false,
 }) => {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [position, setPosition] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const isLogin = mode === "login";
+  const isRegister = mode === "register";
 
   // Организации
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -42,7 +42,6 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [organizationsLoading, setOrganizationsLoading] = useState(false);
   const [organizationsError, setOrganizationsError] = useState<string | null>(null);
   const [isCreatingNewOrganization, setIsCreatingNewOrganization] = useState(false);
-  const [organizationName, setOrganizationName] = useState("");
   const [registerStep, setRegisterStep] = useState<RegisterStep>("userData");
 
   // Локации
@@ -50,9 +49,50 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
   const [locationsLoading, setLocationsLoading] = useState(false);
   const [locationsError, setLocationsError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const isLogin = mode === "login";
-  const isRegister = mode === "register";
+  // React Hook Form
+  const schema = isLogin ? loginSchema : registerSchema;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+    watch,
+    setValue,
+    trigger,
+  } = useForm<LoginFormData | RegisterFormData>({
+    resolver: zodResolver(schema),
+    mode: "onChange",
+    defaultValues: isLogin
+      ? { email: "", password: "" }
+      : {
+          email: "",
+          password: "",
+          fullName: "",
+          position: "",
+        },
+  });
+
+  const watchedOrganizationId = watch("organizationId" as keyof RegisterFormData);
+  const watchedOrganizationName = watch("organizationName" as keyof RegisterFormData);
+  const watchedLocationId = watch("locationId" as keyof RegisterFormData);
+
+  // Синхронизация выбранных значений с формой
+  useEffect(() => {
+    if (isRegister) {
+      if (selectedOrganizationId !== null) {
+        setValue("organizationId" as keyof RegisterFormData, selectedOrganizationId as never);
+        trigger("organizationId" as keyof RegisterFormData);
+      }
+      if (selectedLocationId !== null) {
+        setValue("locationId" as keyof RegisterFormData, selectedLocationId as never);
+        trigger("locationId" as keyof RegisterFormData);
+      }
+      if (isCreatingNewOrganization && registerStep === "createOrganization") {
+        setValue("organizationName" as keyof RegisterFormData, "" as never);
+      }
+    }
+  }, [selectedOrganizationId, selectedLocationId, isCreatingNewOrganization, registerStep, isRegister, setValue, trigger]);
 
   // Загрузка организаций при регистрации
   useEffect(() => {
@@ -78,10 +118,11 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     try {
       const response = await organizationsApi.getAll();
       if (response.error) {
-        // Если ошибка подключения, просто не показываем список, но позволяем создать новую
-        if (response.error.message.includes("Failed to fetch") ||
+        if (
+          response.error.message.includes("Failed to fetch") ||
           response.error.message.includes("ERR_CONNECTION_REFUSED") ||
-          response.error.message.includes("Сетевая ошибка")) {
+          response.error.message.includes("Сетевая ошибка")
+        ) {
           setOrganizationsError("Сервер недоступен. Вы можете создать новую организацию.");
         } else {
           setOrganizationsError(response.error.message || "Ошибка загрузки организаций");
@@ -115,29 +156,23 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const onSubmitForm = (data: LoginFormData | RegisterFormData) => {
     const formData: AuthFormData = {
-      email,
-      password,
+      email: data.email,
+      password: data.password,
     };
 
     if (isRegister) {
-      formData.fullName = fullName;
-      formData.position = position || ""; // Обязательное поле
+      const registerData = data as RegisterFormData;
+      formData.fullName = registerData.fullName;
+      formData.position = registerData.position;
 
       if (registerStep === "createOrganization") {
-        // Создание новой организации
-        formData.organizationName = organizationName;
-        // organizationId не указываем (пустое)
-        // При создании новой организации локация не требуется
+        formData.organizationName = registerData.organizationName;
       } else {
-        // Выбор существующей организации
         if (selectedOrganizationId) {
           formData.organizationId = selectedOrganizationId;
         }
-        // Обязательное указание локации для существующей организации
         if (selectedLocationId) {
           formData.locationId = selectedLocationId;
         }
@@ -151,39 +186,58 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     setSelectedOrganizationId(id);
     setIsCreatingNewOrganization(false);
     setSelectedLocationId(null);
+    if (isRegister) {
+      if (id !== null) {
+        setValue("organizationId" as keyof RegisterFormData, id as never);
+        setValue("organizationName" as keyof RegisterFormData, undefined as never);
+      } else {
+        setValue("organizationId" as keyof RegisterFormData, undefined as never);
+      }
+      trigger("locationId" as keyof RegisterFormData);
+    }
   };
 
   const handleCreateOrganization = () => {
     setIsCreatingNewOrganization(true);
     setSelectedOrganizationId(null);
     setRegisterStep("createOrganization");
+    if (isRegister) {
+      setValue("organizationId" as keyof RegisterFormData, undefined as never);
+      setValue("locationId" as keyof RegisterFormData, undefined as never);
+      setValue("organizationName" as keyof RegisterFormData, "" as never);
+      trigger("organizationName" as keyof RegisterFormData);
+    }
   };
 
   const handleBackToSelection = () => {
     setRegisterStep("userData");
     setIsCreatingNewOrganization(false);
-    setOrganizationName("");
     setSelectedOrganizationId(null);
+    if (isRegister) {
+      setValue("organizationName" as keyof RegisterFormData, undefined as never);
+      trigger("organizationName" as keyof RegisterFormData);
+    }
   };
 
-  const handleNext = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (registerStep === "userData" && isCreatingNewOrganization) {
-      setRegisterStep("createOrganization");
+  const handleLocationChange = (locationId: number | null) => {
+    setSelectedLocationId(locationId);
+    if (isRegister && locationId !== null) {
+      setValue("locationId" as keyof RegisterFormData, locationId as never);
+      trigger("locationId" as keyof RegisterFormData);
     }
   };
 
   // Проверка готовности к регистрации
   const canRegister = isRegister && (
     registerStep === "createOrganization"
-      ? organizationName.trim() !== ""
+      ? (watchedOrganizationName as string | undefined)?.trim() !== ""
       : selectedOrganizationId !== null && (isCreatingNewOrganization || selectedLocationId !== null)
   );
 
   // Если создаем новую организацию и на шаге создания
   if (isRegister && registerStep === "createOrganization") {
     return (
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-6">
+      <form onSubmit={handleSubmit(onSubmitForm)} className="flex flex-col gap-4 sm:gap-6">
         <div className="space-y-4">
           <div className="flex items-center gap-4 mb-4">
             <div className="flex-1 h-px bg-gray-300" />
@@ -191,13 +245,21 @@ export const AuthForm: React.FC<AuthFormProps> = ({
             <div className="flex-1 h-px bg-gray-300" />
           </div>
 
-          <InputField
-            label="Название организации"
-            type="text"
-            value={organizationName}
-            onChange={setOrganizationName}
-            placeholder="Введите название организации"
-          />
+          <div>
+            <InputField
+              label="Название организации"
+              type="text"
+              value={(watchedOrganizationName as string) || ""}
+              onChange={(value) => {
+                setValue("organizationName" as keyof RegisterFormData, value as never);
+                trigger("organizationName" as keyof RegisterFormData);
+              }}
+              placeholder="Введите название организации"
+            />
+            {errors.organizationName && (
+              <p className="mt-1 text-sm text-red-600">{errors.organizationName.message as string}</p>
+            )}
+          </div>
         </div>
 
         <div className="flex gap-3">
@@ -209,7 +271,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
           >
             Назад
           </button>
-          <AuthButton type="submit" disabled={isLoading || !canRegister}>
+          <AuthButton type="submit" disabled={isLoading || !isValid}>
             {isLoading ? "Регистрация..." : "Зарегистрироваться"}
           </AuthButton>
         </div>
@@ -231,42 +293,76 @@ export const AuthForm: React.FC<AuthFormProps> = ({
 
   // Основная форма (логин или регистрация на шаге userData)
   return (
-    <form onSubmit={isRegister && isCreatingNewOrganization ? handleNext : handleSubmit} className="flex flex-col gap-4 sm:gap-6">
+    <form onSubmit={handleSubmit(onSubmitForm)} className="flex flex-col gap-4 sm:gap-6">
       {isRegister && (
-        <InputField
-          label="ФИО"
-          type="text"
-          value={fullName}
-          onChange={setFullName}
-          placeholder="Введите ваше полное имя"
-        />
+        <div>
+          <InputField
+            label="ФИО"
+            type="text"
+            value={watch("fullName" as keyof RegisterFormData) as string || ""}
+            onChange={(value) => {
+              setValue("fullName" as keyof RegisterFormData, value as never);
+              trigger("fullName" as keyof RegisterFormData);
+            }}
+            placeholder="Введите ваше полное имя"
+          />
+          {errors.fullName && (
+            <p className="mt-1 text-sm text-red-600">{errors.fullName.message as string}</p>
+          )}
+        </div>
       )}
 
-      <InputField
-        label="Почта"
-        type="email"
-        value={email}
-        onChange={setEmail}
-        placeholder="Введите вашу почту"
-      />
+      <div>
+        <InputField
+          label="Почта"
+          type="email"
+          value={watch("email") as string || ""}
+          onChange={(value) => {
+            setValue("email", value as never);
+            trigger("email");
+          }}
+          placeholder="Введите вашу почту"
+        />
+        {errors.email && (
+          <p className="mt-1 text-sm text-red-600">{errors.email.message as string}</p>
+        )}
+      </div>
 
-      <InputField
-        label="Пароль"
-        type="password"
-        value={password}
-        onChange={setPassword}
-        placeholder="Введите ваш пароль"
-        showPassword={showPassword}
-        onTogglePassword={() => setShowPassword(!showPassword)}
-      />
+      <div>
+        <InputField
+          label="Пароль"
+          type="password"
+          value={watch("password") as string || ""}
+          onChange={(value) => {
+            setValue("password", value as never);
+            trigger("password");
+          }}
+          placeholder="Введите ваш пароль"
+          showPassword={showPassword}
+          onTogglePassword={() => setShowPassword(!showPassword)}
+        />
+        {errors.password && (
+          <p className="mt-1 text-sm text-red-600">{errors.password.message as string}</p>
+        )}
+      </div>
 
-      {isRegister && <InputField
-        label="Должность"
-        type="text"
-        value={position}
-        onChange={setPosition}
-        placeholder="Введите вашу должность"
-      />}
+      {isRegister && (
+        <div>
+          <InputField
+            label="Должность"
+            type="text"
+            value={watch("position" as keyof RegisterFormData) as string || ""}
+            onChange={(value) => {
+              setValue("position" as keyof RegisterFormData, value as never);
+              trigger("position" as keyof RegisterFormData);
+            }}
+            placeholder="Введите вашу должность"
+          />
+          {errors.position && (
+            <p className="mt-1 text-sm text-red-600">{errors.position.message as string}</p>
+          )}
+        </div>
+      )}
 
       {isRegister && (
         <>
@@ -289,19 +385,23 @@ export const AuthForm: React.FC<AuthFormProps> = ({
               ) : locationsError ? (
                 <div className="text-sm text-red-600">{locationsError}</div>
               ) : (
-                <select
-                  className="w-full h-10 sm:h-12 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={selectedLocationId ?? ""}
-                  onChange={(e) => setSelectedLocationId(e.target.value ? Number(e.target.value) : null)}
-                  required
-                >
-                  <option value="">— выберите локацию —</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name} {loc.city ? `(${loc.city})` : ""}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    className="w-full h-10 sm:h-12 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={selectedLocationId ?? ""}
+                    onChange={(e) => handleLocationChange(e.target.value ? Number(e.target.value) : null)}
+                  >
+                    <option value="">— выберите локацию —</option>
+                    {locations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name} {loc.city ? `(${loc.city})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.locationId && (
+                    <p className="mt-1 text-sm text-red-600">{errors.locationId.message as string}</p>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -310,7 +410,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
 
       <AuthButton
         type="submit"
-        disabled={isLoading || (isRegister && !canRegister && !isCreatingNewOrganization)}
+        disabled={isLoading || (isRegister && !canRegister && !isCreatingNewOrganization) || !isValid}
       >
         {isLoading
           ? "Загрузка..."

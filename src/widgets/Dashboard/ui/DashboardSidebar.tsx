@@ -143,7 +143,6 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           color="gray"
           className="w-full text-sm py-2"
         >
-          <span className="mr-2">🚪</span>
           Выйти
         </Button>
       </div>

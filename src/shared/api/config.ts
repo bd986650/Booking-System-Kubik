@@ -1,3 +1,6 @@
+import { logger } from "@/shared/lib/logger";
+import { showErrorToast } from "@/shared/lib/toast";
+
 // Базовый URL API - можно вынести в переменные окружения
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -37,7 +40,7 @@ export async function apiRequest<T>(
       }
     }
     
-    console.log(`[API Request] ${options.method || "GET"} ${url}`, {
+    logger.debug(`API Request: ${options.method || "GET"} ${url}`, {
       body: requestBody,
       headers: options.headers,
     });
@@ -65,6 +68,21 @@ export async function apiRequest<T>(
         errorMessage = errorText || errorMessage;
       }
 
+      // Очищаем технические детали SQL ошибок
+      if (errorMessage.includes("JDBC exception") || errorMessage.includes("SQL") || errorMessage.includes("column") || errorMessage.includes("does not exist")) {
+        // Извлекаем понятную часть ошибки
+        if (errorMessage.includes("column") && errorMessage.includes("does not exist")) {
+          const columnMatch = errorMessage.match(/column "([^"]+)" does not exist/);
+          if (columnMatch) {
+            errorMessage = `Ошибка базы данных: колонка "${columnMatch[1]}" не найдена. Обратитесь к администратору.`;
+          } else {
+            errorMessage = "Ошибка базы данных. Обратитесь к администратору.";
+          }
+        } else if (errorMessage.includes("JDBC exception")) {
+          errorMessage = "Ошибка базы данных. Обратитесь к администратору.";
+        }
+      }
+
       // Специальная обработка для 404
       if (status === 404) {
         errorMessage = "Эндпоинт не найден. Проверьте, запущен ли сервер и правильность пути API.";
@@ -75,11 +93,37 @@ export async function apiRequest<T>(
         errorMessage = errorData?.message || "Доступ запрещен. У вас нет прав для выполнения этого действия.";
       }
 
-      console.error(`[API Error] ${status} ${url}`, {
+      // Специальная обработка для 409 Conflict (дубликат)
+      if (status === 409) {
+        errorMessage = errorData?.message || "Конфликт: ресурс уже существует.";
+      }
+
+      // Специальная обработка для 500 (внутренняя ошибка сервера)
+      if (status === 500) {
+        // Если это SQL ошибка, показываем более понятное сообщение
+        if (errorMessage.includes("базы данных") || errorMessage.includes("JDBC") || errorMessage.includes("SQL")) {
+          // Уже обработано выше
+        } else if (errorMessage.includes("Duration") || errorMessage.includes("cannot be parsed")) {
+          // Ошибка парсинга Duration - обычно связано с настройками рабочего времени локации
+          errorMessage = "Ошибка конфигурации: проверьте настройки рабочего времени локации (начало/конец рабочего дня). Обратитесь к администратору.";
+        } else {
+          errorMessage = "Внутренняя ошибка сервера. Обратитесь к администратору.";
+        }
+      }
+
+      logger.error(`API Error: ${status} ${url}`, {
         status,
         error: errorData || errorMessage,
         response: errorText,
+        fullError: errorText, // Сохраняем полную ошибку в лог
       });
+
+      // Показываем toast для ошибок (кроме 401, который обрабатывается отдельно)
+      // 401 не показываем, так как он обрабатывается через refresh token
+      // 409 обрабатывается в компонентах с более специфичными сообщениями
+      if (status !== 401 && status !== 404 && status !== 409) {
+        showErrorToast(errorMessage);
+      }
 
       return {
         error: {
@@ -90,28 +134,84 @@ export async function apiRequest<T>(
       };
     }
 
-    // Если ответ 204 No Content, возвращаем успешный ответ без данных
-    if (status === 204) {
-      console.log(`[API Response] ${status} ${url}`, {
-        status,
-        data: undefined,
-        note: "204 No Content",
-      });
-      return { data: undefined as T, status };
-    }
-
     // Читаем тело ответа один раз
     const contentType = response.headers.get("content-type");
     const text = await response.text();
     
     // Если нет контента, возвращаем успешный ответ без данных
     if (!text || text.trim() === "") {
-      console.log(`[API Response] ${status} ${url}`, {
+      logger.debug(`API Response: ${status} ${url}`, {
         status,
         data: undefined,
         responseText: "(empty)",
         contentType,
-        note: "Empty response body",
+        note: status === 201 ? "201 Created (empty body)" : status === 204 ? "204 No Content" : "Empty response body",
+      });
+      return { data: undefined as T, status };
+    }
+
+    // Для 201 Created может быть тело ответа (например, ID созданного ресурса)
+    if (status === 201) {
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          const data = JSON.parse(text);
+          logger.debug(`API Response: ${status} ${url}`, {
+            status,
+            data,
+            responseText: text,
+            note: "201 Created with body",
+          });
+          return { data, status };
+        } catch {
+          // Если не JSON, пытаемся распарсить как число (для простых ID)
+          const numValue = Number(text.trim());
+          if (!isNaN(numValue)) {
+            logger.debug(`API Response: ${status} ${url}`, {
+              status,
+              data: numValue,
+              responseText: text,
+              note: "201 Created with numeric ID",
+            });
+            return { data: numValue as T, status };
+          }
+          logger.debug(`API Response: ${status} ${url}`, {
+            status,
+            data: undefined,
+            responseText: text,
+            note: "201 Created but couldn't parse body",
+          });
+          return { data: undefined as T, status };
+        }
+      } else {
+        // Если не JSON, пытаемся распарсить как число (для простых ID)
+        const numValue = Number(text.trim());
+        if (!isNaN(numValue)) {
+          logger.debug(`API Response: ${status} ${url}`, {
+            status,
+            data: numValue,
+            responseText: text,
+            note: "201 Created with numeric ID (plain text)",
+          });
+          return { data: numValue as T, status };
+        }
+        logger.debug(`API Response: ${status} ${url}`, {
+          status,
+          data: undefined,
+          responseText: text,
+          note: "201 Created but couldn't parse body",
+        });
+        return { data: undefined as T, status };
+      }
+    }
+
+    // Для 204 No Content всегда возвращаем undefined
+    if (status === 204) {
+      logger.debug(`API Response: ${status} ${url}`, {
+        status,
+        data: undefined,
+        responseText: text || "(empty)",
+        contentType,
+        note: "204 No Content",
       });
       return { data: undefined as T, status };
     }
@@ -122,7 +222,7 @@ export async function apiRequest<T>(
       if (contentType && contentType.includes("application/json")) {
         try {
           const data = JSON.parse(text);
-          console.log(`[API Response] ${status} ${url}`, {
+          logger.debug(`API Response: ${status} ${url}`, {
             status,
             data,
             responseText: text,
@@ -130,7 +230,7 @@ export async function apiRequest<T>(
           return { data, status };
         } catch {
           // Если не удалось распарсить, возвращаем успешный ответ
-          console.log(`[API Response] ${status} ${url}`, {
+          logger.debug(`API Response: ${status} ${url}`, {
             status,
             data: undefined,
             responseText: text,
@@ -140,7 +240,7 @@ export async function apiRequest<T>(
         }
       }
       // Если нет контента или это не JSON, возвращаем успешный ответ
-      console.log(`[API Response] ${status} ${url}`, {
+      logger.debug(`API Response: ${status} ${url}`, {
         status,
         data: undefined,
         responseText: text || "(empty)",
@@ -153,21 +253,23 @@ export async function apiRequest<T>(
     if (contentType && contentType.includes("application/json")) {
       try {
         const data = JSON.parse(text);
-        console.log(`[API Response] ${status} ${url}`, {
+        logger.debug(`API Response: ${status} ${url}`, {
           status,
           data,
           responseText: text,
         });
         return { data, status };
       } catch {
-        console.error(`[API Parse Error] ${status} ${url}`, {
+        logger.error(`API Parse Error: ${status} ${url}`, {
           status,
           responseText: text,
           contentType,
         });
+        const errorMessage = "Ошибка парсинга ответа сервера";
+        showErrorToast(errorMessage);
         return {
           error: {
-            message: "Ошибка парсинга ответа сервера",
+            message: errorMessage,
           },
           status,
         };
@@ -175,7 +277,7 @@ export async function apiRequest<T>(
     }
     
     // Если это не JSON, возвращаем текст как данные или ошибку
-    console.warn(`[API Unexpected Format] ${status} ${url}`, {
+    logger.warn(`API Unexpected Format: ${status} ${url}`, {
       status,
       responseText: text,
       contentType,
@@ -188,14 +290,16 @@ export async function apiRequest<T>(
     };
   } catch (error) {
     const url = `${API_BASE_URL}${endpoint}`;
-    console.error(`[API Network Error] ${options.method || "GET"} ${url}`, {
-      error: error instanceof Error ? error.message : "Unknown error",
+    const errorMessage = error instanceof Error ? error.message : "Сетевая ошибка";
+    logger.error(`API Network Error: ${options.method || "GET"} ${url}`, {
+      error: errorMessage,
       errorType: error instanceof Error ? error.constructor.name : typeof error,
       endpoint,
     });
+    showErrorToast(errorMessage);
     return {
       error: {
-        message: error instanceof Error ? error.message : "Сетевая ошибка",
+        message: errorMessage,
       },
     };
   }
@@ -208,7 +312,7 @@ export async function authenticatedRequest<T>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   // Логируем информацию о токене для отладки (без самого токена)
-  console.log(`[authenticatedRequest] Making request to ${endpoint}`, {
+  logger.debug(`Authenticated Request: ${endpoint}`, {
     hasToken: !!token,
     tokenLength: token?.length,
     tokenPrefix: token?.substring(0, 20) + "...",

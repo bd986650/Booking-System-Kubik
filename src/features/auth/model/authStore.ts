@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { logger } from "@/shared/lib/logger";
 
 export interface User {
   email: string;
@@ -71,7 +72,7 @@ export const useAuthStore = create<AuthState>()(
       storage: typeof window !== "undefined" ? createJSONStorage(() => localStorage) : undefined,
       onRehydrateStorage: () => (state, error) => {
         if (error) {
-          console.error("Error rehydrating auth store:", error);
+          logger.error("Error rehydrating auth store", error);
         }
         if (state) {
           state.setHasHydrated(true);

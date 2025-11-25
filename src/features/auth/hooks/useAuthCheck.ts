@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "../model/authStore";
 import { authApi } from "../api/auth";
+import { logger } from "@/shared/lib/logger";
 
 export const useAuthCheck = () => {
   const router = useRouter();
@@ -31,8 +32,10 @@ export const useAuthCheck = () => {
 
       // Если токен валиден, продолжаем
       if (checkResponse.data) {
-        console.log("[useAuthCheck] Roles from checkAuth:", checkResponse.data.roles);
-        console.log("[useAuthCheck] OrganizationId from checkAuth:", checkResponse.data.organizationId);
+        logger.debug("Auth check successful", {
+          roles: checkResponse.data.roles,
+          organizationId: checkResponse.data.organizationId,
+        });
         setUser({
           email: checkResponse.data.email,
           fullName: checkResponse.data.fullName,
@@ -62,8 +65,10 @@ export const useAuthCheck = () => {
           );
 
           if (newCheckResponse.data) {
-            console.log("[useAuthCheck] Roles after refresh:", newCheckResponse.data.roles);
-            console.log("[useAuthCheck] OrganizationId after refresh:", newCheckResponse.data.organizationId);
+            logger.debug("Auth refresh successful", {
+              roles: newCheckResponse.data.roles,
+              organizationId: newCheckResponse.data.organizationId,
+            });
             setUser({
               email: newCheckResponse.data.email,
               fullName: newCheckResponse.data.fullName,
