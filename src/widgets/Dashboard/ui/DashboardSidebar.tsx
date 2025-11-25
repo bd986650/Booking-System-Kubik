@@ -12,6 +12,7 @@ type DashboardSection =
   | "user-management"
   | "workspaces"
   | "bookings"
+  | "analytics"
   | "profile";
 
 interface DashboardSidebarProps {
@@ -58,6 +59,12 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
     label: "Бронирования",
     icon: "📅",
     roles: ["ROLE_USER", "ROLE_ADMIN_PROJECT", "ROLE_ADMIN_WORKSPACE"],
+  },
+  {
+    id: "analytics",
+    label: "Аналитика",
+    icon: "📈",
+    roles: ["ROLE_ADMIN_PROJECT", "ROLE_ADMIN_WORKSPACE"],
   },
   {
     id: "profile",

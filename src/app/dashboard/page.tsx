@@ -11,6 +11,7 @@ import { Bookings } from "@/features/booking";
 import { WorkspacesAdmin } from "@/widgets/WorkspacesAdmin";
 import { Overview } from "@/widgets/Overview";
 import { Profile } from "@/features/profile";
+import { Analytics } from "@/widgets/Analytics";
 import { registrationRequestsApi } from "@/features/authorization-requests";
 
 type DashboardSection = 
@@ -19,6 +20,7 @@ type DashboardSection =
   | "user-management"
   | "workspaces"
   | "bookings"
+  | "analytics"
   | "profile";
 
 export default function DashboardPage() {
@@ -29,7 +31,7 @@ export default function DashboardPage() {
   // Поддержка URL параметра section
   useEffect(() => {
     const sectionParam = searchParams.get("section");
-    if (sectionParam && ["overview", "authorization-requests", "user-management", "workspaces", "bookings", "profile"].includes(sectionParam)) {
+    if (sectionParam && ["overview", "authorization-requests", "user-management", "workspaces", "bookings", "analytics", "profile"].includes(sectionParam)) {
       setActiveSection(sectionParam as DashboardSection);
     }
   }, [searchParams]);
@@ -103,6 +105,8 @@ export default function DashboardPage() {
         return <WorkspacesAdmin />;
       case "bookings":
         return <Bookings />;
+      case "analytics":
+        return <Analytics />;
       case "profile":
         return <Profile />;
       default:
