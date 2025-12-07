@@ -4,14 +4,20 @@ import { GridBackground } from "./GridBackground";
 import { BoundaryPolygon } from "./BoundaryPolygon";
 import { RoomElement } from "./RoomElement";
 import { DragOverlay } from "./DragOverlay";
+import { ZoomControls } from "../controls/ZoomControls";
 
 interface OfficeCanvasProps {
   rooms: Room[];
   boundaryPoints: number[][];
   boundaryClosed: boolean;
+  isDrawingBoundary: boolean;
   zoom: number;
   offset: { x: number; y: number };
   selectedRoomId: ID | null;
+  selectedRoom: Room | null;
+  roomSpaceTypes?: Record<string, number>;
+  roomCapacities?: Record<string, number>;
+  onCloseRoomInfo?: () => void;
   draggingPreset: Preset | null;
   draggingPresetPos: { x: number; y: number } | null;
   onCanvasClick: (e: React.MouseEvent<SVGSVGElement>) => void;
@@ -28,15 +34,24 @@ interface OfficeCanvasProps {
   isResizing: boolean;
   wrapperRef: React.RefObject<HTMLDivElement | null>;
   svgRef: React.RefObject<SVGSVGElement | null>;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onResetView?: () => void;
+  editMode?: boolean;
 }
 
 export const OfficeCanvas: React.FC<OfficeCanvasProps> = ({
   rooms,
   boundaryPoints,
   boundaryClosed,
+  isDrawingBoundary,
   zoom,
   offset,
   selectedRoomId,
+  selectedRoom,
+  roomSpaceTypes = {},
+  roomCapacities = {},
+  onCloseRoomInfo,
   draggingPreset,
   draggingPresetPos,
   onCanvasClick,
@@ -53,12 +68,59 @@ export const OfficeCanvas: React.FC<OfficeCanvasProps> = ({
   isResizing,
   wrapperRef,
   svgRef,
+  onZoomIn,
+  onZoomOut,
+  onResetView,
+  editMode = true,
 }) => {
+  // Вычисляем позицию попапа рядом с выбранной комнатой
+  const getPopupPosition = () => {
+    if (!selectedRoom || !svgRef.current || !wrapperRef.current) return null;
+    
+    const wrapperRect = wrapperRef.current.getBoundingClientRect();
+    
+    // Координаты комнаты в canvas координатах
+    const roomX = selectedRoom.x;
+    const roomY = selectedRoom.y;
+    const roomWidth = selectedRoom.width || 50;
+    
+    // Преобразуем в экранные координаты
+    const screenX = (roomX * zoom) + offset.x;
+    const screenY = (roomY * zoom) + offset.y;
+    
+    // Позиция попапа справа от комнаты (или слева, если не помещается)
+    const popupWidth = 280;
+    const popupHeight = 120;
+    const spacing = 10;
+    
+    let left = screenX + (roomWidth * zoom) + spacing;
+    let top = screenY;
+    
+    // Если не помещается справа, показываем слева
+    if (left + popupWidth > wrapperRect.width) {
+      left = screenX - popupWidth - spacing;
+    }
+    
+    // Если не помещается снизу, показываем сверху
+    if (top + popupHeight > wrapperRect.height) {
+      top = screenY - popupHeight;
+    }
+    
+    // Ограничиваем границами контейнера
+    left = Math.max(10, Math.min(left, wrapperRect.width - popupWidth - 10));
+    top = Math.max(10, Math.min(top, wrapperRect.height - popupHeight - 10));
+    
+    return { left, top };
+  };
+  
+  const popupPos = getPopupPosition();
 
   return (
     <div
       ref={wrapperRef}
-      className="relative w-full h-full bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+      className={`relative w-full h-full overflow-hidden ${
+        editMode ? "bg-white" : "bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-100"
+      }`}
     >
       <svg
         ref={svgRef}
@@ -72,26 +134,19 @@ export const OfficeCanvas: React.FC<OfficeCanvasProps> = ({
         onDoubleClick={onCanvasDblClick}
         onWheel={onWheel}
         style={{ userSelect: "none" }}
-        className="bg-white"
+        className={editMode ? "bg-white" : "bg-transparent"}
       >
-        <defs>
-          <clipPath id="boundaryClip">
-            {boundaryClosed && boundaryPoints.length > 2 ? (
-              <polygon points={boundaryPoints.map((p) => p.join(",")).join(" ")} />
-            ) : (
-              <rect x="-10000" y="-10000" width="20000" height="20000" />
-            )}
-          </clipPath>
-        </defs>
-
-        <GridBackground offset={offset} zoom={zoom} />
+        {/* Сетка только в режиме редактирования */}
+        {editMode && <GridBackground offset={offset} zoom={zoom} />}
 
         <g transform={`translate(${offset.x},${offset.y}) scale(${zoom})`}>
+          {isDrawingBoundary && (
           <BoundaryPolygon
             boundaryPoints={boundaryPoints}
             boundaryClosed={boundaryClosed}
             zoom={zoom}
           />
+          )}
 
           {rooms.map((room) => (
             <RoomElement
@@ -101,12 +156,83 @@ export const OfficeCanvas: React.FC<OfficeCanvasProps> = ({
               zoom={zoom}
               onMouseDown={onRoomMouseDown}
               onResizeMouseDown={onRoomResizeMouseDown}
+              editMode={editMode}
             />
           ))}
         </g>
       </svg>
 
       <DragOverlay draggingPreset={draggingPreset} draggingPresetPos={draggingPresetPos} />
+
+      {/* Попап с информацией о выбранной комнате */}
+      {selectedRoom && popupPos && (
+        <div
+          className="absolute z-40 bg-white border-2 border-blue-400 shadow-xl pointer-events-auto"
+          style={{
+            left: `${popupPos.left}px`,
+            top: `${popupPos.top}px`,
+            width: '280px',
+          }}
+        >
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-2.5 flex items-center justify-between">
+            <h3 className="font-bold text-white text-sm truncate">{selectedRoom.name}</h3>
+            {onCloseRoomInfo && (
+              <button
+                onClick={onCloseRoomInfo}
+                className="text-white/80 hover:text-white transition-colors ml-2 flex-shrink-0"
+                title="Закрыть"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <div className="p-4 space-y-2.5">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Размер:</span>
+              <span className="font-semibold text-gray-900">
+                {Math.round(selectedRoom.width)} × {Math.round(selectedRoom.height)} м
+              </span>
+            </div>
+            {roomSpaceTypes[selectedRoom.id] && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500">Тип ID:</span>
+                <span className="font-semibold text-gray-900">{roomSpaceTypes[selectedRoom.id]}</span>
+              </div>
+            )}
+            {roomCapacities[selectedRoom.id] && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500">Вместимость:</span>
+                <span className="font-semibold text-blue-600">{roomCapacities[selectedRoom.id]} мест</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Управление масштабом */}
+      {zoom !== undefined && onZoomIn && onZoomOut && onResetView && (
+        <div className="absolute top-4 right-4 z-30 pointer-events-auto">
+          <ZoomControls zoom={zoom} onZoomIn={onZoomIn} onZoomOut={onZoomOut} onReset={onResetView} />
+        </div>
+      )}
+
+      {/* Легенда по цветам и статусам помещений */}
+      <div className="pointer-events-none absolute left-4 bottom-4 z-10 bg-white px-3 py-2 border border-slate-200 text-[11px] text-slate-600 space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-sm bg-sky-100 border border-sky-400" />
+          <span>Помещение (доступно)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-sm bg-sky-200 border border-sky-600" />
+          <span>Выбранное помещение</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-sm border border-dashed border-sky-500" />
+          <span>Контур этажа</span>
+        </div>
+      </div>
 
       <div
         onMouseMove={(e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {

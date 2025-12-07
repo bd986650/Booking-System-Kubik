@@ -3,7 +3,7 @@
 import React from "react";
 import { useAuthStore } from "@/features/auth";
 import { isProjectAdmin, isWorkspaceAdmin } from "@/shared/lib/roles";
-import { AnalyticsReports } from "@/widgets/WorkspacesAdmin/ui/AnalyticsReports";
+import { AnalyticsReports } from "@/widgets/WorkspacesAdmin";
 
 export const Analytics: React.FC = () => {
   const { user, accessToken } = useAuthStore();
@@ -24,10 +24,7 @@ export const Analytics: React.FC = () => {
     : null;
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Аналитика и отчеты</h1>
       <AnalyticsReports accessToken={accessToken} locationId={locationId || undefined} />
-    </div>
   );
 };
 

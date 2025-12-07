@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { CustomSelect, type SelectOption } from "@/shared/ui";
 
 interface Organization {
   id: number;
@@ -40,29 +41,37 @@ export const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
       )}
 
       <div className="space-y-3">
-        {organizations.length > 0 ? (
-          <select
-            value={selectedOrganizationId || ""}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value === "new") {
+        {organizations.length > 0 ? (() => {
+          const options: SelectOption[] = [
+            ...organizations.map((org) => ({
+              value: org.id,
+              label: org.name,
+            })),
+            {
+              value: "__new__",
+              label: "+ Создать новую организацию",
+            },
+          ];
+
+          const handleChange = (val: string | number | null) => {
+            if (val === "__new__") {
                 onCreateNew();
-              } else {
-                onOrganizationChange(value ? Number(value) : null);
-              }
-            }}
+              return;
+            }
+            onOrganizationChange(typeof val === "number" ? val : val ? Number(val) : null);
+          };
+
+          return (
+            <CustomSelect
+              value={selectedOrganizationId}
+              onChange={handleChange}
+              options={options}
+              placeholder="Выберите организацию..."
             disabled={isLoading}
-            className="w-full h-10 sm:h-12 px-3 sm:px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm sm:text-base text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="">Выберите организацию...</option>
-            {organizations.map((org) => (
-              <option key={org.id} value={org.id}>
-                {org.name}
-              </option>
-            ))}
-            <option value="new">+ Создать новую организацию</option>
-          </select>
-        ) : (
+              size="lg"
+            />
+          );
+        })() : (
           <button
             type="button"
             onClick={onCreateNew}

@@ -1,49 +1,35 @@
 /**
- * Форматирует время с учетом offset для отображения в нужном часовом поясе
- * @param isoString - ISO строка времени (может содержать offset)
- * @param offset - смещение времени (например, "+03:00")
- * @returns отформатированное время в формате МСК
+ * Форматирует время с учетом offset.
+ *
+ * Сервер отдает время в UTC (например, "2025-11-27T06:00:00") и отдельное поле offset
+ * (например, "+03:00" для МСК). Нам нужно отобразить локальное время: UTC + offset.
+ *
+ * Функция не зависит от часового пояса браузера и всегда возвращает строку "HH:MM".
  */
 export function formatTimeWithOffset(isoString: string, offset?: string): string {
-  let date: Date;
-  
-  // Если ISO строка уже содержит offset (например, "2025-11-25T06:00:00+03:00"),
-  // Date правильно его обработает
-  if (isoString.includes("+") || isoString.includes("Z") || isoString.match(/[+-]\d{2}:\d{2}$/)) {
-    date = new Date(isoString);
-  } 
-  // Если ISO строка не содержит offset, но offset указан отдельно,
-  // это означает, что время в UTC, и offset показывает целевой часовой пояс
-  else if (offset) {
-    // Парсим offset (например, "+03:00" -> +3 часа)
-    const offsetMatch = offset.match(/^([+-])(\d{2}):(\d{2})$/);
-    if (offsetMatch) {
-      const sign = offsetMatch[1] === "+" ? 1 : -1;
-      const hours = parseInt(offsetMatch[2], 10);
-      const minutes = parseInt(offsetMatch[3], 10);
+  // Приводим входную строку к UTC‑времени.
+  // Если нет ни "Z", ни смещения в конце, считаем, что это "чистый" UTC и добавляем "Z".
+  const hasZone = /[+-]\d{2}:\d{2}$/.test(isoString) || isoString.endsWith("Z");
+  const utcString = hasZone ? isoString : `${isoString}Z`;
+
+  let timeMs = new Date(utcString).getTime();
+
+  // Если есть offset, прибавляем его к UTC
+  if (offset) {
+    const match = offset.match(/^([+-])(\d{2}):(\d{2})$/);
+    if (match) {
+      const sign = match[1] === "+" ? 1 : -1;
+      const hours = parseInt(match[2], 10);
+      const minutes = parseInt(match[3], 10);
       const offsetMs = sign * (hours * 60 + minutes) * 60 * 1000;
-      
-      // Парсим время как UTC (добавляем Z)
-      const utcDate = new Date(isoString.endsWith("Z") ? isoString : isoString + "Z");
-      
-      // Применяем offset: если offset "+03:00", значит UTC время нужно показать как МСК
-      // То есть добавляем 3 часа к UTC времени
-      date = new Date(utcDate.getTime() + offsetMs);
-    } else {
-      // Если offset в неверном формате, парсим как есть
-      date = new Date(isoString);
+      timeMs += offsetMs;
     }
-  } 
-  // Если offset не указан, парсим как есть
-  else {
-    date = new Date(isoString);
   }
-  
-  // Форматируем в МСК
-  return date.toLocaleTimeString("ru-RU", { 
-    hour: "2-digit", 
-    minute: "2-digit",
-    timeZone: "Europe/Moscow"
-  });
+
+  const shifted = new Date(timeMs);
+  // Берем часы/минуты в UTC из уже сдвинутого времени — так избегаем влияния часового пояса ОС
+  const hh = shifted.getUTCHours().toString().padStart(2, "0");
+  const mm = shifted.getUTCMinutes().toString().padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 

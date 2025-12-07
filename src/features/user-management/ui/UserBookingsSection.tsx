@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import type { BookingItem, SpaceType, SpaceItem, TimeIntervalItem } from "@/entities/booking";
-import { formatTimeWithOffset } from "@/features/booking/lib/timeUtils";
+import { formatTimeWithOffset } from "@/features/booking";
+import { CustomSelect } from "@/shared/ui";
 
 interface UserBookingsSectionProps {
   userEmail: string;
@@ -42,8 +43,10 @@ export const UserBookingsSection: React.FC<UserBookingsSectionProps> = ({
   onLoadIntervals,
   onCreateBooking,
   creatingBooking,
-  accessToken,
   setSpaces,
+  // accessToken не используется, но оставлен для совместимости API
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  accessToken: _accessToken,
 }) => {
   const [spaceTypeId, setSpaceTypeId] = useState<number | null>(null);
   const [floorNumber, setFloorNumber] = useState<string>("");
@@ -78,20 +81,21 @@ export const UserBookingsSection: React.FC<UserBookingsSectionProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Тип помещения</label>
-              <select
-                className="w-full border rounded px-3 py-2"
-                value={spaceTypeId ?? ""}
-                onChange={(e) => {
-                  setSpaceTypeId(e.target.value ? Number(e.target.value) : null);
+              <CustomSelect
+                value={spaceTypeId}
+                onChange={(val) => {
+                  const next = val ? Number(val) : null;
+                  setSpaceTypeId(next);
                   setSpaces([]);
                   setSelectedSpaceId(null);
                 }}
-              >
-                <option value="">— выберите —</option>
-                {spaceTypes.map((t) => (
-                  <option key={t.id} value={t.id}>{t.type}</option>
-                ))}
-              </select>
+                options={spaceTypes.map((t) => ({
+                  value: t.id,
+                  label: t.type,
+                }))}
+                placeholder="— выберите —"
+                size="md"
+              />
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">Этаж (опц.)</label>
@@ -115,18 +119,16 @@ export const UserBookingsSection: React.FC<UserBookingsSectionProps> = ({
           {spaces.length > 0 && (
             <div className="mb-4">
               <label className="block text-sm text-gray-600 mb-1">Выберите помещение</label>
-              <select
-                className="w-full border rounded px-3 py-2"
-                value={selectedSpaceId ?? ""}
-                onChange={(e) => setSelectedSpaceId(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">— выберите —</option>
-                {spaces.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    #{s.id} · {s.spaceType} · {s.capacity} мест · этаж {s.floor.floorNumber}
-                  </option>
-                ))}
-              </select>
+              <CustomSelect
+                value={selectedSpaceId}
+                onChange={(val) => setSelectedSpaceId(val ? Number(val) : null)}
+                options={spaces.map((s) => ({
+                  value: s.id,
+                  label: `#${s.id} · ${s.spaceType} · ${s.capacity} мест · этаж ${s.floor.floorNumber}`,
+                }))}
+                placeholder="— выберите —"
+                size="md"
+              />
             </div>
           )}
 

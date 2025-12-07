@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { InputField, OrganizationSelector } from "@/shared/ui";
+import { InputField, OrganizationSelector, CustomSelect } from "@/shared/ui";
 import { AuthButton } from "@/shared/ui/buttons";
 import { organizationsApi, type Organization, type Location } from "@/features/auth";
 import { loginSchema, registerSchema, type LoginFormData, type RegisterFormData } from "../lib/validation";
@@ -54,7 +54,6 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   // React Hook Form
   const schema = isLogin ? loginSchema : registerSchema;
   const {
-    register,
     handleSubmit,
     formState: { errors, isValid },
     watch,
@@ -73,9 +72,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         },
   });
 
-  const watchedOrganizationId = watch("organizationId" as keyof RegisterFormData);
   const watchedOrganizationName = watch("organizationName" as keyof RegisterFormData);
-  const watchedLocationId = watch("locationId" as keyof RegisterFormData);
 
   // Синхронизация выбранных значений с формой
   useEffect(() => {
@@ -386,18 +383,16 @@ export const AuthForm: React.FC<AuthFormProps> = ({
                 <div className="text-sm text-red-600">{locationsError}</div>
               ) : (
                 <>
-                  <select
-                    className="w-full h-10 sm:h-12 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={selectedLocationId ?? ""}
-                    onChange={(e) => handleLocationChange(e.target.value ? Number(e.target.value) : null)}
-                  >
-                    <option value="">— выберите локацию —</option>
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name} {loc.city ? `(${loc.city})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <CustomSelect
+                    value={selectedLocationId}
+                    onChange={(val) => handleLocationChange(val ? Number(val) : null)}
+                    options={locations.map((loc) => ({
+                      value: loc.id,
+                      label: `${loc.name}${loc.city ? ` (${loc.city})` : ""}`,
+                    }))}
+                    placeholder="— выберите локацию —"
+                    size="lg"
+                  />
                   {errors.locationId && (
                     <p className="mt-1 text-sm text-red-600">{errors.locationId.message as string}</p>
                   )}

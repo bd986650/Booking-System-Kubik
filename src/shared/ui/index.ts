@@ -1,5 +1,6 @@
 // Re-export всех shared/ui компонентов через их public API
 export * from "./inputs/InputField";
+export { CustomSelect } from "./inputs/Select";
 
 // Buttons
 export { Button, AuthButton, ScrollButton } from "./buttons";

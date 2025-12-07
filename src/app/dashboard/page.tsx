@@ -78,6 +78,40 @@ export default function DashboardPage() {
     }
   };
 
+  const sectionMeta: Record<
+    DashboardSection,
+    { title: string; description: string }
+  > = {
+    overview: {
+      title: "Обзор",
+      description: "Ключевые метрики и ближайшие события по вашим бронированиям.",
+    },
+    "authorization-requests": {
+      title: "Заявки на доступ",
+      description: "Управляйте запросами на авторизацию и роли пользователей.",
+    },
+    "user-management": {
+      title: "Пользователи",
+      description: "Просмотр, назначение ролей и управление пользователями организации.",
+    },
+    workspaces: {
+      title: "Пространства",
+      description: "Администрирование офисов, рабочих мест и рабочих пространств.",
+    },
+    bookings: {
+      title: "Бронирования",
+      description: "Поиск свободных мест и управление текущими бронями.",
+    },
+    analytics: {
+      title: "Аналитика",
+      description: "Отчёты и статистика использования офисных пространств.",
+    },
+    profile: {
+      title: "Профиль",
+      description: "Личная информация, роль и настройки пользователя.",
+    },
+  };
+
   if (isChecking) {
     return (
       <div className="flex h-screen bg-gray-50 items-center justify-center">
@@ -115,7 +149,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-slate-50">
       <DashboardSidebar
         userRoles={user.roles}
         activeSection={activeSection}
@@ -123,7 +157,21 @@ export default function DashboardPage() {
         pendingRequestsCount={unreadRequestsCount}
       />
       <main className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto px-6 py-6 lg:px-10 lg:py-8">
+          <header className="flex flex-col gap-2 mb-6 lg:mb-8">
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                Панель управления
+              </p>
+              <h1 className="mt-1 text-2xl lg:text-3xl font-extrabold text-slate-900">
+                {sectionMeta[activeSection].title}
+              </h1>
+              <p className="mt-1.5 text-sm text-slate-500 max-w-2xl">
+                {sectionMeta[activeSection].description}
+              </p>
+          </header>
+
         {renderContent()}
+        </div>
       </main>
     </div>
   );

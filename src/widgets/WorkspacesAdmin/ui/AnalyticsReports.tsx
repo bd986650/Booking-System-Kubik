@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { reportsApi, type ReportRequest } from "@/entities/admin";
 import { Button } from "@/shared/ui/buttons";
+import { CustomSelect } from "@/shared/ui";
 import { showSuccessToast, showErrorToast } from "@/shared/lib/toast";
 import { logger } from "@/shared/lib/logger";
 
@@ -124,18 +125,19 @@ export const AnalyticsReports: React.FC<AnalyticsReportsProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Часовой пояс
             </label>
-            <select
+            <CustomSelect
               value={timeZone}
-              onChange={(e) => setTimeZone(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="Europe/Moscow">Москва (Europe/Moscow)</option>
-              <option value="Asia/Novosibirsk">Новосибирск (Asia/Novosibirsk)</option>
-              <option value="Asia/Yekaterinburg">Екатеринбург (Asia/Yekaterinburg)</option>
-              <option value="Asia/Krasnoyarsk">Красноярск (Asia/Krasnoyarsk)</option>
-              <option value="Asia/Irkutsk">Иркутск (Asia/Irkutsk)</option>
-              <option value="Asia/Vladivostok">Владивосток (Asia/Vladivostok)</option>
-            </select>
+              onChange={(val) => setTimeZone(String(val))}
+              options={[
+                { value: "Europe/Moscow", label: "Москва (Europe/Moscow)" },
+                { value: "Asia/Novosibirsk", label: "Новосибирск (Asia/Novosibirsk)" },
+                { value: "Asia/Yekaterinburg", label: "Екатеринбург (Asia/Yekaterinburg)" },
+                { value: "Asia/Krasnoyarsk", label: "Красноярск (Asia/Krasnoyarsk)" },
+                { value: "Asia/Irkutsk", label: "Иркутск (Asia/Irkutsk)" },
+                { value: "Asia/Vladivostok", label: "Владивосток (Asia/Vladivostok)" },
+              ]}
+              size="md"
+            />
           </div>
         </div>
       </div>

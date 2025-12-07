@@ -5,10 +5,11 @@ import { useAuthStore } from "@/features/auth";
 import { workspaceAdminApi } from "@/entities/location";
 import type { RegistrationRequest } from "@/entities/location";
 import { showSuccessToast, showErrorToast } from "@/shared/lib/toast";
+import { isWorkspaceAdmin } from "@/shared/lib/roles";
 import { Button } from "@/shared/ui/buttons";
 
 export const AuthorizationRequests: React.FC = () => {
-  const { accessToken } = useAuthStore();
+  const { accessToken, user } = useAuthStore();
   const [requests, setRequests] = useState<RegistrationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +46,17 @@ export const AuthorizationRequests: React.FC = () => {
     fetchRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  // Дополнительная защита: раздел доступен только workspace-админу
+  const isWsAdmin = isWorkspaceAdmin(user || null);
+
+  if (!isWsAdmin) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
+        Доступ к заявкам на регистрацию есть только у администратора рабочего пространства.
+      </div>
+    );
+  }
 
   const handleApprove = async (id: number) => {
     if (!accessToken) return;
@@ -100,21 +112,8 @@ export const AuthorizationRequests: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("ru-RU", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Заявки на авторизацию</h1>
-
+    <div>
       {loading && (
         <div className="bg-white rounded-2xl border border-gray-300 p-8 text-center transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
           <p className="text-gray-500">Загрузка заявок...</p>
@@ -180,7 +179,8 @@ export const AuthorizationRequests: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-600">
-                            {formatDate(request.createdAt)}
+                            {/* createdAt пока нет в типе RegistrationRequest */}
+                            —
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">

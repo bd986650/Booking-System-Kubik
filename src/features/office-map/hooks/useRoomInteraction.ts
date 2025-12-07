@@ -16,6 +16,7 @@ export const useRoomInteraction = ({
   svgRef,
   offset,
   zoom,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   rooms: _rooms,
   currentFloor,
   setFloors,
@@ -28,9 +29,9 @@ export const useRoomInteraction = ({
   const [resizeRoomId, setResizeRoomId] = useState<ID | null>(null);
 
   const startMoveRoom = (e: React.MouseEvent, room: Room) => {
-    if (!editMode) return; // В режиме просмотра не перемещаем
     e.stopPropagation();
     setSelectedRoomId(room.id);
+    if (!editMode) return; // В режиме просмотра только выделяем, без перетаскивания
     setIsMovingRoom(true);
     const canvasP = clientToCanvasCoords({
       clientX: e.clientX,

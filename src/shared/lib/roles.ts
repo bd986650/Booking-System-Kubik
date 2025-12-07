@@ -80,8 +80,8 @@ export function canManageBooking(
 
 // Приоритет ролей для отображения (от высшего к низшему)
 const ROLE_PRIORITY: Record<UserRole, number> = {
-  ROLE_ADMIN_WORKSPACE: 3,
-  ROLE_ADMIN_PROJECT: 2,
+  ROLE_ADMIN_PROJECT: 3,
+  ROLE_ADMIN_WORKSPACE: 2,
   ROLE_USER: 1,
 };
 

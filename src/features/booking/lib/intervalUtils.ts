@@ -36,11 +36,17 @@ export function splitIntervalByDurations(interval: TimeIntervalItem): TimeInterv
     return [interval];
   }
 
-  // Парсим время с учетом offset
-  // Если offset указан, время уже в нужном часовом поясе (МСК)
-  // Если нет, используем как есть
-  const startTime = new Date(interval.start).getTime();
-  const endTime = new Date(interval.end).getTime();
+  // Парсим время как UTC.
+  // Сервер отдает время в UTC без "Z" (например, "2025-11-27T06:00:00"),
+  // поэтому добавляем "Z", чтобы избежать интерпретации как локального времени браузера.
+  const toUtcMs = (value: string): number => {
+    const hasZone = /[+-]\d{2}:\d{2}$/.test(value) || value.endsWith("Z");
+    const utcString = hasZone ? value : `${value}Z`;
+    return new Date(utcString).getTime();
+  };
+
+  const startTime = toUtcMs(interval.start);
+  const endTime = toUtcMs(interval.end);
   const offset = interval.offset || "+03:00"; // По умолчанию МСК
   const result: TimeIntervalItem[] = [];
 

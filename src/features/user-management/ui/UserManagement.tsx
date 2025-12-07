@@ -13,7 +13,90 @@ import type { BookingItem, SpaceType, SpaceItem, TimeIntervalItem } from "@/enti
 import { showSuccessToast, showErrorToast } from "@/shared/lib/toast";
 import { UserBookingsSection } from "./UserBookingsSection";
 import { Button } from "@/shared/ui/buttons";
-import { processIntervals } from "@/features/booking/lib/intervalUtils";
+
+// Локальная копия обработки интервалов, чтобы не нарушать границы фич
+function parseDurationToMs(duration: string): number {
+  const match = duration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?$/);
+  if (!match) {
+    throw new Error(`Неверный формат длительности: ${duration}`);
+  }
+  const hours = parseInt(match[1] || "0", 10);
+  const minutes = parseInt(match[2] || "0", 10);
+  return (hours * 60 + minutes) * 60 * 1000;
+}
+
+function splitIntervalByDurations(interval: TimeIntervalItem): TimeIntervalItem[] {
+  const isAvailable =
+    interval.status === "available" ||
+    (interval.available === true && interval.status !== "unavailable");
+
+  if (!isAvailable) {
+    return [interval];
+  }
+
+  if (!interval.availableDurations || interval.availableDurations.length === 0) {
+    return [interval];
+  }
+
+  const startTime = new Date(interval.start).getTime();
+  const endTime = new Date(interval.end).getTime();
+  const offset = interval.offset || "+03:00";
+  const result: TimeIntervalItem[] = [];
+
+  for (const duration of interval.availableDurations) {
+    try {
+      const durationMs = parseDurationToMs(duration);
+      let currentStart = startTime;
+
+      while (currentStart + durationMs <= endTime) {
+        const currentEnd = currentStart + durationMs;
+        const startISO = new Date(currentStart).toISOString();
+        const endISO = new Date(currentEnd).toISOString();
+
+        result.push({
+          ...interval,
+          start: startISO,
+          end: endISO,
+          offset,
+          available: true,
+          status: "available",
+          availableDurations: [duration],
+        });
+
+        currentStart = currentEnd;
+      }
+    } catch (error) {
+      console.error(`Ошибка парсинга длительности ${duration}:`, error);
+    }
+  }
+
+  if (result.length === 0) {
+    return [interval];
+  }
+
+  return result.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+}
+
+function processIntervals(intervals: TimeIntervalItem[]): TimeIntervalItem[] {
+  const result: TimeIntervalItem[] = [];
+
+  for (const interval of intervals) {
+    const split = splitIntervalByDurations(interval);
+    result.push(...split);
+  }
+
+  const unique = new Map<string, TimeIntervalItem>();
+  for (const interval of result) {
+    const key = `${interval.start}_${interval.end}`;
+    if (!unique.has(key)) {
+      unique.set(key, interval);
+    }
+  }
+
+  return Array.from(unique.values()).sort(
+    (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
+  );
+}
 
 export const UserManagement: React.FC = () => {
   const { accessToken, user } = useAuthStore();
@@ -335,7 +418,7 @@ export const UserManagement: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div>
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -349,7 +432,7 @@ export const UserManagement: React.FC = () => {
   // Если нет прав доступа, показываем предупреждение
   if (!hasAdminAccess) {
     return (
-      <div className="p-8">
+      <div>
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
           <h2 className="text-xl font-bold text-yellow-900 mb-2">Доступ ограничен</h2>
           <p className="text-yellow-800 mb-2">
@@ -374,9 +457,9 @@ export const UserManagement: React.FC = () => {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold text-gray-900">Управление пользователями</h1>
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div />
         <Button
           onClick={fetchUsers}
           variant="filled"

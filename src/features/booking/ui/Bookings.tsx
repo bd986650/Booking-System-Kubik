@@ -6,15 +6,16 @@ import { bookingApi } from "@/entities/booking";
 import type {
   SpaceType,
   SpaceItem,
-  TimeIntervalItem,
   BookingItem,
 } from "@/entities/booking";
 import { canManageBooking, isProjectAdmin, isWorkspaceAdmin } from "@/shared/lib/roles";
 import { showSuccessToast, showErrorToast } from "@/shared/lib/toast";
 import { adminApi } from "@/entities/admin";
+import { organizationsApi, type Location } from "@/entities/organization";
 import { Button } from "@/shared/ui/buttons";
-import { processIntervals } from "../lib/intervalUtils";
-import { formatTimeWithOffset } from "../lib/timeUtils";
+import { CustomSelect } from "@/shared/ui";
+import { BookingModal } from "./BookingModal";
+import { BookingMap } from "./BookingMap";
 
 export const Bookings: React.FC = () => {
   const { user, accessToken } = useAuthStore();
@@ -26,18 +27,25 @@ export const Bookings: React.FC = () => {
   const [floorNumber, setFloorNumber] = useState<string>("");
   const [spaces, setSpaces] = useState<SpaceItem[]>([]);
   const [selectedSpaceId, setSelectedSpaceId] = useState<number | null>(null);
+  const [selectedSpace, setSelectedSpace] = useState<SpaceItem | null>(null);
   const [date, setDate] = useState<string>("");
-  const [intervals, setIntervals] = useState<TimeIntervalItem[]>([]);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [currentFloorNumber, setCurrentFloorNumber] = useState<number>(1);
+  const [allSpaces, setAllSpaces] = useState<SpaceItem[]>([]); // Все загруженные пространства
   const [activeBookings, setActiveBookings] = useState<BookingItem[]>([]);
   const [allBookings, setAllBookings] = useState<BookingItem[]>([]);
   const [allActiveBookings, setAllActiveBookings] = useState<BookingItem[]>([]); // Для админов
   const [loading, setLoading] = useState(false);
-  const [creatingBooking, setCreatingBooking] = useState(false);
   const [cancellingBooking, setCancellingBooking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Locations list
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+
   const isAdminWorkspace = useMemo(() => isWorkspaceAdmin(user || null), [user]);
   const isAdminProject = useMemo(() => isProjectAdmin(user || null), [user]);
+  const organizationId = user?.organizationId || null;
 
   useEffect(() => {
     if (!locationId || !accessToken) return;
@@ -65,6 +73,37 @@ export const Bookings: React.FC = () => {
     })();
   }, [accessToken, isAdminWorkspace, isAdminProject]);
 
+  // Загрузка списка локаций
+  useEffect(() => {
+    const loadLocations = async () => {
+      if (!organizationId || !accessToken) {
+        setLocations([]);
+        return;
+      }
+
+      setLoadingLocations(true);
+      try {
+        const res = await organizationsApi.getLocationsByOrganization(organizationId);
+        if (res.error) {
+          // Не показываем ошибку для обычных пользователей, только для админов
+          if (isAdminWorkspace || isAdminProject) {
+            showErrorToast(res.error.message || "Не удалось загрузить список локаций");
+          }
+        } else if (res.data) {
+          setLocations(res.data);
+        }
+      } catch {
+        if (isAdminWorkspace || isAdminProject) {
+          showErrorToast("Произошла ошибка при загрузке списка локаций");
+        }
+      } finally {
+        setLoadingLocations(false);
+      }
+    };
+
+    loadLocations();
+  }, [organizationId, accessToken, isAdminWorkspace, isAdminProject]);
+
   const handleFilterSpaces = async () => {
     if (!locationId || !spaceTypeId || !accessToken) {
       setError("Укажите локацию и тип помещения");
@@ -72,83 +111,46 @@ export const Bookings: React.FC = () => {
     }
     setError(null);
     setLoading(true);
+    const floorNum = floorNumber ? Number(floorNumber) : undefined;
     const res = await bookingApi.filterSpaces({
       locationId,
       spaceTypeId,
-      floorNumber: floorNumber ? Number(floorNumber) : undefined,
+      floorNumber: floorNum,
     }, accessToken);
-    if (res.data) setSpaces(res.data);
+    if (res.data) {
+      setAllSpaces(res.data);
+      // Фильтруем по текущему этажу
+      const floorNum = floorNumber ? Number(floorNumber) : (res.data.length > 0 && res.data[0].floor ? res.data[0].floor.floorNumber : 1);
+      setCurrentFloorNumber(floorNum);
+      const filteredSpaces = res.data.filter(s => s.floor.floorNumber === floorNum);
+      setSpaces(filteredSpaces);
+      // Сбрасываем выбранное пространство
+      setSelectedSpaceId(null);
+      setSelectedSpace(null);
+    }
     if (res.error) setError(res.error.message);
     setLoading(false);
   };
 
-  const handleLoadIntervals = async () => {
-    if (!date || !selectedSpaceId || !accessToken) {
-      setError("Выберите помещение и дату");
+  const handleSpaceClick = (space: SpaceItem) => {
+    if (!date) {
+      showErrorToast("Сначала выберите дату для бронирования", "Выберите дату");
       return;
     }
-    setError(null);
-    setLoading(true);
-    const res = await bookingApi.getTimeIntervals({ date, spaceId: selectedSpaceId }, accessToken);
-    if (res.data) {
-      // Разбиваем большие интервалы на мелкие с учетом availableDurations
-      const processedIntervals = processIntervals(res.data);
-      setIntervals(processedIntervals);
-    }
-    if (res.error) setError(res.error.message);
-    setLoading(false);
+    setSelectedSpace(space);
+    setSelectedSpaceId(space.id);
+    setShowBookingModal(true);
   };
 
-  const handleCreateBooking = async (start: string, end: string) => {
-    if (!accessToken || !selectedSpaceId || creatingBooking) return;
-    
-    setCreatingBooking(true);
-    setError(null);
-    
-    // Используем тип пространства как тип бронирования
-    // В документации указано, что type - это тип бронирования (например, "MEETING")
-    // Для простоты используем тип пространства
-    const spaceType = spaceTypes.find((t) => t.id === spaceTypeId);
-    const bookingType = spaceType?.type || "MEETING";
-    
-    try {
-      const res = await bookingApi.createBooking(
-        { spaceId: selectedSpaceId, type: bookingType, start, end },
-        accessToken
-      );
-      
-      if (res.error) {
-        setError(res.error.message);
-        showErrorToast(res.error.message, "Ошибка бронирования");
-      } else if (res.data) {
-        showSuccessToast(
-          `Бронирование создано успешно! ${res.data.spaceName} на ${new Date(res.data.start).toLocaleString()}`,
-          "Бронирование создано"
-        );
-        
-        // Обновляем списки
-        const [activeRes, allRes] = await Promise.all([
-          bookingApi.getActiveBookings(accessToken),
-          bookingApi.getAllBookings(accessToken),
-        ]);
-        if (activeRes.data) setActiveBookings(activeRes.data);
-        if (allRes.data) setAllBookings(allRes.data);
-        
-        // Обновляем интервалы, чтобы показать, что этот слот больше недоступен
-        if (date && selectedSpaceId && accessToken) {
-          const intervalsRes = await bookingApi.getTimeIntervals({ date, spaceId: selectedSpaceId }, accessToken);
-          if (intervalsRes.data) {
-            const processedIntervals = processIntervals(intervalsRes.data);
-            setIntervals(processedIntervals);
-          }
-        }
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Неизвестная ошибка";
-      setError(errorMessage);
-      showErrorToast(errorMessage, "Ошибка бронирования");
-    } finally {
-      setCreatingBooking(false);
+  const handleBookingCreated = async () => {
+    // Обновляем списки бронирований
+    if (accessToken) {
+      const [activeRes, allRes] = await Promise.all([
+        bookingApi.getActiveBookings(accessToken),
+        bookingApi.getAllBookings(accessToken),
+      ]);
+      if (activeRes.data) setActiveBookings(activeRes.data);
+      if (allRes.data) setAllBookings(allRes.data);
     }
   };
 
@@ -206,14 +208,6 @@ export const Bookings: React.FC = () => {
           if (allActiveRes.data) setAllActiveBookings(allActiveRes.data);
         }
         
-        // Если отмененное бронирование было для выбранного помещения и даты, обновляем интервалы
-        if (selectedSpaceId === booking.spaceId && date && accessToken) {
-          const intervalsRes = await bookingApi.getTimeIntervals({ date, spaceId: selectedSpaceId }, accessToken);
-          if (intervalsRes.data) {
-            const processedIntervals = processIntervals(intervalsRes.data);
-            setIntervals(processedIntervals);
-          }
-        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Неизвестная ошибка";
@@ -225,9 +219,7 @@ export const Bookings: React.FC = () => {
   };
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Бронирования</h1>
-
+    <div>
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {error}
@@ -238,31 +230,55 @@ export const Bookings: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Поиск помещений</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Локация (ID)</label>
-            <input
-              type="number"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-              value={locationId || ""}
-              onChange={(e) => setLocationId(Number(e.target.value))}
-              disabled={!isAdminWorkspace && !isAdminProject}
-            />
-            {!isAdminWorkspace && !isAdminProject && (
-              <p className="text-xs text-gray-500 mt-1.5">Ваш офис: {defaultLocationId}</p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Локация</label>
+            {(isAdminWorkspace || isAdminProject) ? (
+              <CustomSelect
+                value={locationId || null}
+                onChange={(val) => setLocationId(val ? Number(val) : 0)}
+                options={locations.map((location) => ({
+                  value: location.id,
+                  label: `${location.name}${location.city ? ` (${location.city})` : ""}${location.isActive ? "" : " [Неактивна]"}`,
+                }))}
+                placeholder="Выберите локацию"
+                disabled={loadingLocations}
+                size="md"
+              />
+            ) : (
+              <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50">
+                {loadingLocations ? (
+                  <p className="text-sm text-gray-500">Загрузка...</p>
+                ) : (
+                  <p className="text-sm text-gray-700">
+                    {(() => {
+                      const userLocation = locations.find(l => l.id === defaultLocationId);
+                      return userLocation 
+                        ? `${userLocation.name}${userLocation.city ? ` (${userLocation.city})` : ""}`
+                        : `ID: ${defaultLocationId}`;
+                    })()}
+                  </p>
+                )}
+              </div>
+            )}
+            {loadingLocations && (isAdminWorkspace || isAdminProject) && (
+              <p className="text-xs text-gray-500 mt-1.5">Загрузка локаций...</p>
+            )}
+            {!loadingLocations && locations.length === 0 && (isAdminWorkspace || isAdminProject) && organizationId && (
+              <p className="text-xs text-gray-500 mt-1.5">Локации не найдены</p>
             )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Тип помещения</label>
-            <select
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-              value={spaceTypeId ?? ""}
-              onChange={(e) => setSpaceTypeId(e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">— выберите —</option>
-              {spaceTypes.map((t) => (
-                <option key={t.id} value={t.id}>{t.type}</option>
-              ))}
-            </select>
+            <CustomSelect
+              value={spaceTypeId}
+              onChange={(val) => setSpaceTypeId(val ? Number(val) : null)}
+              options={spaceTypes.map((t) => ({
+                value: t.id,
+                label: t.type,
+              }))}
+              placeholder="— выберите —"
+              size="md"
+            />
           </div>
 
           <div>
@@ -289,127 +305,128 @@ export const Bookings: React.FC = () => {
         </div>
       </div>
 
+      {/* Выбор даты перед показом карты */}
+      <div className="bg-white rounded-2xl border border-gray-300 p-6 mb-6 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
+        <div className="flex gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Дата бронирования</label>
+            <input
+              type="date"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
+            />
+          </div>
+          <div className="text-sm text-gray-500">
+            {date ? `Выбрана дата: ${new Date(date).toLocaleDateString('ru-RU')}` : "Выберите дату для бронирования"}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-300 p-6 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Помещения</h2>
+          {/* Карта с пространствами */}
+          <div className="bg-white rounded-2xl border border-gray-300 p-6 transition-colors duration-200 hover:border-blue-500">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Карта офиса</h2>
+              {spaces.length > 0 && (
+                <div className="flex items-center gap-4">
+                  {/* Переключение этажей, если есть пространства на разных этажах */}
+                  {(() => {
+                    const uniqueFloors = Array.from(new Set(spaces.map(s => s.floor.floorNumber))).sort();
+                    if (uniqueFloors.length > 1) {
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">Этаж:</span>
+                          <CustomSelect
+                            value={currentFloorNumber}
+                            onChange={(val) => {
+                              const floor = Number(val);
+                              setCurrentFloorNumber(floor);
+                              const filteredSpaces = allSpaces.filter(s => s.floor.floorNumber === floor);
+                              setSpaces(filteredSpaces);
+                              setSelectedSpaceId(null);
+                              setSelectedSpace(null);
+                            }}
+                            options={uniqueFloors.map((floor) => ({
+                              value: floor,
+                              label: `Этаж ${floor}`,
+                            }))}
+                            size="sm"
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="text-sm text-gray-500">
+                        Этаж {currentFloorNumber} · Найдено: {spaces.length} пространств
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
             {spaces.length === 0 ? (
-              <p className="text-gray-500 text-sm py-4">Нет результатов. Уточните фильтры.</p>
+              <div className="h-96 flex items-center justify-center bg-gray-50 rounded-lg">
+                <div className="text-center">
+                  <p className="text-gray-500 text-sm mb-2">Нет результатов. Уточните фильтры.</p>
+                  <p className="text-gray-400 text-xs">Выберите локацию, тип помещения и нажмите &quot;Найти помещения&quot;</p>
+                </div>
+              </div>
+            ) : !date ? (
+              <div className="h-96 flex items-center justify-center bg-gray-50 rounded-lg">
+                <div className="text-center">
+                  <p className="text-gray-500 text-sm mb-2">Выберите дату для бронирования</p>
+                  <p className="text-gray-400 text-xs">Дата необходима для отображения доступных интервалов</p>
+                </div>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="h-96">
+                <BookingMap
+                  locationId={locationId}
+                  floorNumber={currentFloorNumber}
+                  spaces={spaces}
+                  selectedSpaceId={selectedSpaceId}
+                  accessToken={accessToken || ""}
+                  onSpaceClick={handleSpaceClick}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Список помещений (альтернативный вид) */}
+          {spaces.length > 0 && (
+            <div className="bg-white border border-gray-200 p-4">
+              <h2 className="text-base font-semibold text-gray-900 mb-3">Список помещений</h2>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
                 {spaces.map((s) => (
                   <div
                     key={s.id}
-                    className={`p-4 border rounded-lg transition-all ${
+                    className={`p-3 border border-gray-200 transition-colors cursor-pointer ${
                       selectedSpaceId === s.id
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                        ? "bg-gray-100 border-gray-300"
+                        : "bg-white hover:bg-gray-50"
                     }`}
+                    onClick={() => {
+                      if (date) {
+                        handleSpaceClick(s);
+                      } else {
+                        showErrorToast("Сначала выберите дату", "Выберите дату");
+                      }
+                    }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="font-semibold text-sm text-gray-900 mb-1">
-                          #{s.id} · {s.spaceType} · {s.capacity} мест · этаж {s.floor.floorNumber}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          Локация: {s.locationId} · {s.bookable ? "доступно" : "недоступно"}
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => setSelectedSpaceId(s.id)}
-                        variant={selectedSpaceId === s.id ? "filled" : "outline"}
-                        color="blue"
-                        className="ml-4 min-w-[100px]"
-                      >
-                        {selectedSpaceId === s.id ? "Выбрано" : "Выбрать"}
-                      </Button>
+                    <div className="font-medium text-sm text-gray-900 mb-1">
+                      #{s.id} · {s.spaceType} · {s.capacity} мест · этаж {s.floor.floorNumber}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {s.bookable ? "✓ Доступно для бронирования" : "✗ Недоступно"}
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-300 p-6 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Доступные интервалы</h2>
-            <div className="flex gap-3 items-end mb-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Дата</label>
-                <input
-                  type="date"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-              </div>
-              <Button
-                onClick={handleLoadIntervals}
-                variant="filled"
-                color="blue"
-                disabled={loading}
-                className="whitespace-nowrap"
-              >
-                {loading ? "Загрузка..." : "Показать интервалы"}
-              </Button>
             </div>
-
-            {intervals.length === 0 ? (
-              <p className="text-gray-500 text-sm py-4">
-                Выберите помещение и дату, затем нажмите &quot;Показать интервалы&quot;.
-              </p>
-            ) : (
-              <div className="grid md:grid-cols-2 gap-3">
-                {intervals.map((it, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-4 border rounded-lg transition-all ${
-                      !(it.status === "available" || it.available === true)
-                        ? "opacity-60 border-gray-200 bg-gray-50"
-                        : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
-                    }`}
-                  >
-                    <div className="font-semibold text-sm text-gray-900 mb-1">
-                      {formatTimeWithOffset(it.start, it.offset)} — {formatTimeWithOffset(it.end, it.offset)}
-                    </div>
-                    <div className="text-xs text-gray-500 mb-3">
-                      {(it.status === "available" || it.available === true) ? (
-                        <>
-                          Доступно
-                          {it.availableDurations && it.availableDurations.length > 0 && (
-                            <span className="ml-2">
-                              ({it.availableDurations.map(d => {
-                                // Преобразуем PT30M в "30 мин", PT1H в "1 ч"
-                                const match = d.match(/^PT(?:(\d+)H)?(?:(\d+)M)?$/);
-                                if (match) {
-                                  const hours = match[1] ? `${match[1]} ч` : "";
-                                  const minutes = match[2] ? `${match[2]} мин` : "";
-                                  return hours && minutes ? `${hours} ${minutes}` : hours || minutes;
-                                }
-                                return d;
-                              }).join(", ")})
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        "Недоступно"
-                      )}
-                    </div>
-                    {(it.status === "available" || it.available === true) && (
-                      <Button
-                        onClick={() => handleCreateBooking(it.start, it.end)}
-                        variant="filled"
-                        color="blue"
-                        disabled={creatingBooking}
-                        className="w-full text-sm"
-                      >
-                        {creatingBooking ? "Бронирование..." : "Забронировать"}
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -504,8 +521,20 @@ export const Bookings: React.FC = () => {
         </div>
       </div>
 
-      {/* Примечание по карте: отдельный экран конструктора сейчас в /map. 
-          Для пользовательской карты можно будет сделать просмотр слоями по выбранной локации. */}
+      {/* Модальное окно бронирования */}
+      {accessToken && (
+        <BookingModal
+          isOpen={showBookingModal}
+          space={selectedSpace}
+          date={date}
+          accessToken={accessToken}
+          onClose={() => {
+            setShowBookingModal(false);
+            setSelectedSpace(null);
+          }}
+          onBookingCreated={handleBookingCreated}
+        />
+      )}
     </div>
   );
 };

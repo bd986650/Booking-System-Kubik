@@ -5,8 +5,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/features/auth";
 import { workspaceAdminApi, AdminBookingItem, UserInfo } from "@/entities/location";
-import { isProjectAdmin, isWorkspaceAdmin } from "@/shared/lib/roles";
+import { organizationsApi, type Location } from "@/entities/organization";
+import { bookingApi, type SpaceType, type SpaceItem, type SpacesByFloorResponse } from "@/entities/booking";
+import { isWorkspaceAdmin } from "@/shared/lib/roles";
 import { Button } from "@/shared/ui/buttons";
+import { CustomSelect } from "@/shared/ui";
 import { showSuccessToast, showErrorToast } from "@/shared/lib/toast";
 import { logger } from "@/shared/lib/logger";
 
@@ -26,8 +29,38 @@ export const WorkspacesAdmin: React.FC = () => {
   }, [searchParams]);
   const [loading, setLoading] = useState(false);
 
-  const isAdmin = useMemo(() => isWorkspaceAdmin(user || null) || isProjectAdmin(user || null), [user]);
+  // Управление офисами — только для workspace-админа
+  const isAdmin = useMemo(() => isWorkspaceAdmin(user || null), [user]);
   const organizationId = user?.organizationId || null;
+
+  // Загрузка списка локаций
+  useEffect(() => {
+    const loadLocations = async () => {
+      if (!organizationId || !accessToken) {
+        setLocations([]);
+        return;
+      }
+
+      setLoadingLocations(true);
+      try {
+        const res = await organizationsApi.getLocationsByOrganization(organizationId);
+        if (res.error) {
+          logger.error("Ошибка загрузки локаций", res.error);
+          showErrorToast(res.error.message || "Не удалось загрузить список локаций");
+        } else if (res.data) {
+          setLocations(res.data);
+        }
+      } catch (error) {
+        logger.error("Ошибка загрузки локаций", error);
+        showErrorToast("Произошла ошибка при загрузке списка локаций");
+      } finally {
+        setLoadingLocations(false);
+      }
+    };
+
+    // Загружаем локации при монтировании и при изменении organizationId
+    loadLocations();
+  }, [organizationId, accessToken]);
 
   // Create Location
   const [locName, setLocName] = useState("");
@@ -43,7 +76,7 @@ export const WorkspacesAdmin: React.FC = () => {
   const [stName, setStName] = useState("");
   const [stAllowedDurations, setStAllowedDurations] = useState<string[]>([]);
   const [stLocationId, setStLocationId] = useState<string>("");
-  
+
   const availableDurations = ["30m", "1h", "2h", "4h", "6h", "8h"];
 
   // Constructor
@@ -54,7 +87,13 @@ export const WorkspacesAdmin: React.FC = () => {
   const [viewLocationId, setViewLocationId] = useState<string>("");
   const [locationBookings, setLocationBookings] = useState<AdminBookingItem[]>([]);
   const [locationUsers, setLocationUsers] = useState<UserInfo[]>([]);
+  const [locationSpaceTypes, setLocationSpaceTypes] = useState<SpaceType[]>([]);
+  const [locationSpaces, setLocationSpaces] = useState<SpaceItem[]>([]);
   const [loadingLocationData, setLoadingLocationData] = useState(false);
+
+  // Locations list
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
 
   const validateLocationForm = (): string | null => {
     if (!locName.trim()) return "Название локации обязательно";
@@ -73,10 +112,10 @@ export const WorkspacesAdmin: React.FC = () => {
     if (!stLocationId || !Number(stLocationId)) return "ID локации обязателен";
     return null;
   };
-  
+
   const handleDurationToggle = (duration: string) => {
-    setStAllowedDurations(prev => 
-      prev.includes(duration) 
+    setStAllowedDurations(prev =>
+      prev.includes(duration)
         ? prev.filter(d => d !== duration)
         : [...prev, duration]
     );
@@ -93,16 +132,16 @@ export const WorkspacesAdmin: React.FC = () => {
       }
       throw new Error(`Неверный формат длительности: ${duration}`);
     }
-    
+
     const value = parseInt(match[1], 10);
     const unit = match[2];
-    
+
     if (unit === "m") {
       return `PT${value}M`; // Минуты: PT30M
     } else if (unit === "h") {
       return `PT${value}H`; // Часы: PT1H, PT2H
     }
-    
+
     throw new Error(`Неизвестная единица времени: ${unit}`);
   };
 
@@ -144,12 +183,12 @@ export const WorkspacesAdmin: React.FC = () => {
       if (res.error) {
         showErrorToast(res.error.message);
       } else {
-        logger.debug("Ответ от API создания локации", { 
-          data: res.data, 
+        logger.debug("Ответ от API создания локации", {
+          data: res.data,
           dataType: typeof res.data,
           status: res.status,
         });
-        
+
         // Обрабатываем разные форматы ответа: число, объект с id, строка
         let locationId: number | null = null;
         if (typeof res.data === "number") {
@@ -165,23 +204,31 @@ export const WorkspacesAdmin: React.FC = () => {
           locationId = Number((res.data as { id: number | string }).id);
           logger.debug("ID локации извлечен из объекта", { locationId, object: res.data });
         }
-        
+
         if (!locationId || isNaN(locationId)) {
-          logger.error("Не удалось извлечь ID локации из ответа", { 
-            data: res.data, 
+          logger.error("Не удалось извлечь ID локации из ответа", {
+            data: res.data,
             dataType: typeof res.data,
             status: res.status,
           });
           showErrorToast("Локация создана, но не удалось получить её ID. Проверьте консоль для деталей.");
           return;
         }
-        
+
         logger.debug("Успешно извлечен ID локации", { locationId });
         setCreatedLocationId(locationId);
         setConstructorLocationId(String(locationId));
         setStLocationId(String(locationId)); // Автоматически заполняем ID локации для создания типа пространства
         showSuccessToast(`Локация "${locName}" успешно создана!`, "ID: " + locationId);
-        
+
+        // Обновляем список локаций
+        if (organizationId) {
+          const res = await organizationsApi.getLocationsByOrganization(organizationId);
+          if (res.data) {
+            setLocations(res.data);
+          }
+        }
+
         // Очищаем форму
         setLocName("");
         setLocCity("");
@@ -191,7 +238,7 @@ export const WorkspacesAdmin: React.FC = () => {
         setLocWorkEnd("18:00");
         setLocTimeZone("Europe/Moscow");
         setLocOrgIdManual("");
-        
+
         // Переключаемся на вкладку конструктора
         setTimeout(() => setActiveTab("constructor"), 1000);
       }
@@ -287,11 +334,14 @@ export const WorkspacesAdmin: React.FC = () => {
     // Очищаем предыдущие данные
     setLocationBookings([]);
     setLocationUsers([]);
-    
+    setLocationSpaceTypes([]);
+    setLocationSpaces([]);
+
     try {
-      const [bookingsRes, usersRes] = await Promise.all([
+      const [bookingsRes, usersRes, spaceTypesRes] = await Promise.all([
         workspaceAdminApi.getLocationActiveBookings(locationIdNum, accessToken),
         workspaceAdminApi.getLocationUsers(locationIdNum, accessToken),
+        bookingApi.getSpaceTypes(locationIdNum, accessToken),
       ]);
 
       let hasData = false;
@@ -315,6 +365,51 @@ export const WorkspacesAdmin: React.FC = () => {
         logger.debug("Загружены пользователи", { count: usersRes.data.length });
       }
 
+      if (spaceTypesRes.error) {
+        logger.error("Ошибка загрузки типов пространств", spaceTypesRes.error);
+        errorMessages.push(`Типы пространств: ${spaceTypesRes.error.message}`);
+      } else if (spaceTypesRes.data) {
+        setLocationSpaceTypes(spaceTypesRes.data);
+        hasData = true;
+        logger.debug("Загружены типы пространств", { count: spaceTypesRes.data.length });
+      }
+
+      // Загружаем пространства по этажам (1-10) и собираем в один список
+      const spacesByFloor: SpaceItem[] = [];
+      const floorsData: Record<number, SpacesByFloorResponse> = {};
+
+      const floorPromises: Promise<void>[] = [];
+      for (let floorNumber = 1; floorNumber <= 10; floorNumber++) {
+        floorPromises.push(
+          bookingApi
+            .getSpacesByLocationAndFloor(locationIdNum, floorNumber, accessToken)
+            .then((res) => {
+              if (res.data && res.data.spaces && res.data.spaces.length > 0) {
+                floorsData[floorNumber] = res.data;
+                spacesByFloor.push(
+                  ...res.data.spaces.map((s) => ({
+                    ...s,
+                  }))
+                );
+              }
+            })
+            .catch((err) => {
+              logger.debug(`Этаж ${floorNumber} не найден или пуст при просмотре`, err);
+            })
+        );
+      }
+
+      await Promise.all(floorPromises);
+
+      if (spacesByFloor.length > 0) {
+        setLocationSpaces(spacesByFloor);
+        hasData = true;
+        logger.debug("Загружены пространства по локации", {
+          total: spacesByFloor.length,
+          floors: Object.keys(floorsData),
+        });
+      }
+
       if (errorMessages.length > 0) {
         showErrorToast(errorMessages.join("; "));
       }
@@ -322,7 +417,11 @@ export const WorkspacesAdmin: React.FC = () => {
       if (hasData) {
         const bookingsCount = bookingsRes.data?.length || 0;
         const usersCount = usersRes.data?.length || 0;
-        showSuccessToast(`Загружено: ${bookingsCount} бронирований, ${usersCount} пользователей`);
+        const spaceTypesCount = spaceTypesRes.data?.length || 0;
+        const spacesCount = locationSpaces.length || spacesByFloor.length || 0;
+        showSuccessToast(
+          `Загружено: ${bookingsCount} бронирований, ${usersCount} пользователей, ${spaceTypesCount} типов, ${spacesCount} помещений`
+        );
       } else if (errorMessages.length === 0) {
         showErrorToast("Данные не найдены для данной локации");
       }
@@ -336,8 +435,7 @@ export const WorkspacesAdmin: React.FC = () => {
 
   if (!isAdmin) {
     return (
-      <div className="p-8">
-        <h1 className="text-3xl font-extrabold text-gray-900 mb-4">Рабочие пространства</h1>
+      <div>
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
           Доступ только для администраторов проекта или воркспейса.
         </div>
@@ -353,9 +451,7 @@ export const WorkspacesAdmin: React.FC = () => {
   ];
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Управление пространствами</h1>
-
+    <div>
       {/* Tabs */}
       <div className="mb-8 border-b border-gray-200">
         <div className="flex gap-1 overflow-x-auto">
@@ -363,11 +459,10 @@ export const WorkspacesAdmin: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 text-sm font-semibold whitespace-nowrap transition-all duration-200 border-b-2 ${
-                activeTab === tab.id
-                  ? "border-blue-500 text-blue-500"
-                  : "border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300"
-              }`}
+              className={`px-6 py-3 text-sm font-semibold whitespace-nowrap transition-all duration-200 border-b-2 ${activeTab === tab.id
+                ? "border-blue-500 text-blue-500"
+                : "border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300"
+                }`}
             >
               {tab.label}
             </button>
@@ -456,12 +551,98 @@ export const WorkspacesAdmin: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Часовой пояс
                   </label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                    placeholder="Europe/Moscow"
+                  <CustomSelect
                     value={locTimeZone}
-                    onChange={(e) => setLocTimeZone(e.target.value)}
+                    onChange={(val) => setLocTimeZone(String(val))}
+                    options={[
+                      { value: "Europe/Moscow", label: "Москва (MSK, UTC+3)" },
+                      { value: "Europe/Samara", label: "Самара (SAMT, UTC+4)" },
+                      { value: "Asia/Yekaterinburg", label: "Екатеринбург (YEKT, UTC+5)" },
+                      { value: "Asia/Omsk", label: "Омск (OMST, UTC+6)" },
+                      { value: "Asia/Krasnoyarsk", label: "Красноярск (KRAT, UTC+7)" },
+                      { value: "Asia/Irkutsk", label: "Иркутск (IRKT, UTC+8)" },
+                      { value: "Asia/Chita", label: "Чита (YAKT, UTC+9)" },
+                      { value: "Asia/Vladivostok", label: "Владивосток (VLAT, UTC+10)" },
+                      { value: "Asia/Magadan", label: "Магадан (MAGT, UTC+11)" },
+                      { value: "Asia/Kamchatka", label: "Петропавловск-Камчатский (PETT, UTC+12)" },
+                      { value: "Europe/Kaliningrad", label: "Калининград (EET, UTC+2)" },
+                      { value: "Europe/Volgograd", label: "Волгоград (MSK, UTC+3)" },
+                      { value: "Europe/Astrakhan", label: "Астрахань (MSK, UTC+4)" },
+                      { value: "Europe/Saratov", label: "Саратов (MSK, UTC+4)" },
+                      { value: "Asia/Novosibirsk", label: "Новосибирск (NOVT, UTC+7)" },
+                      { value: "Asia/Novokuznetsk", label: "Новокузнецк (KRAT, UTC+7)" },
+                      { value: "Asia/Barnaul", label: "Барнаул (KRAT, UTC+7)" },
+                      { value: "Asia/Tomsk", label: "Томск (KRAT, UTC+7)" },
+                      { value: "Asia/Khandyga", label: "Хандыга (VLAT, UTC+10)" },
+                      { value: "Asia/Yakutsk", label: "Якутск (YAKT, UTC+9)" },
+                      { value: "Asia/Ust-Nera", label: "Усть-Нера (VLAT, UTC+10)" },
+                      { value: "Asia/Srednekolymsk", label: "Среднеколымск (SRET, UTC+11)" },
+                      { value: "Europe/Minsk", label: "Минск (MSK, UTC+3)" },
+                      { value: "Europe/London", label: "Лондон (GMT, UTC+0)" },
+                      { value: "Europe/Paris", label: "Париж (CET, UTC+1)" },
+                      { value: "Europe/Berlin", label: "Берлин (CET, UTC+1)" },
+                      { value: "Europe/Rome", label: "Рим (CET, UTC+1)" },
+                      { value: "Europe/Madrid", label: "Мадрид (CET, UTC+1)" },
+                      { value: "Europe/Amsterdam", label: "Амстердам (CET, UTC+1)" },
+                      { value: "Europe/Brussels", label: "Брюссель (CET, UTC+1)" },
+                      { value: "Europe/Vienna", label: "Вена (CET, UTC+1)" },
+                      { value: "Europe/Prague", label: "Прага (CET, UTC+1)" },
+                      { value: "Europe/Warsaw", label: "Варшава (CET, UTC+1)" },
+                      { value: "Europe/Stockholm", label: "Стокгольм (CET, UTC+1)" },
+                      { value: "Europe/Oslo", label: "Осло (CET, UTC+1)" },
+                      { value: "Europe/Copenhagen", label: "Копенгаген (CET, UTC+1)" },
+                      { value: "Europe/Helsinki", label: "Хельсинки (EET, UTC+2)" },
+                      { value: "Europe/Athens", label: "Афины (EET, UTC+2)" },
+                      { value: "Europe/Istanbul", label: "Стамбул (TRT, UTC+3)" },
+                      { value: "Europe/Bucharest", label: "Бухарест (EET, UTC+2)" },
+                      { value: "Europe/Sofia", label: "София (EET, UTC+2)" },
+                      { value: "Europe/Belgrade", label: "Белград (CET, UTC+1)" },
+                      { value: "Europe/Zagreb", label: "Загреб (CET, UTC+1)" },
+                      { value: "Europe/Dublin", label: "Дублин (GMT, UTC+0)" },
+                      { value: "Europe/Lisbon", label: "Лиссабон (WET, UTC+0)" },
+                      { value: "America/New_York", label: "Нью-Йорк (EST, UTC-5)" },
+                      { value: "America/Chicago", label: "Чикаго (CST, UTC-6)" },
+                      { value: "America/Denver", label: "Денвер (MST, UTC-7)" },
+                      { value: "America/Los_Angeles", label: "Лос-Анджелес (PST, UTC-8)" },
+                      { value: "America/Toronto", label: "Торонто (EST, UTC-5)" },
+                      { value: "America/Vancouver", label: "Ванкувер (PST, UTC-8)" },
+                      { value: "America/Mexico_City", label: "Мехико (CST, UTC-6)" },
+                      { value: "America/Sao_Paulo", label: "Сан-Паулу (BRT, UTC-3)" },
+                      { value: "America/Buenos_Aires", label: "Буэнос-Айрес (ART, UTC-3)" },
+                      { value: "America/Lima", label: "Лима (PET, UTC-5)" },
+                      { value: "America/Bogota", label: "Богота (COT, UTC-5)" },
+                      { value: "America/Santiago", label: "Сантьяго (CLT, UTC-3)" },
+                      { value: "America/Caracas", label: "Каракас (VET, UTC-4)" },
+                      { value: "Asia/Tokyo", label: "Токио (JST, UTC+9)" },
+                      { value: "Asia/Shanghai", label: "Шанхай (CST, UTC+8)" },
+                      { value: "Asia/Beijing", label: "Пекин (CST, UTC+8)" },
+                      { value: "Asia/Hong_Kong", label: "Гонконг (HKT, UTC+8)" },
+                      { value: "Asia/Singapore", label: "Сингапур (SGT, UTC+8)" },
+                      { value: "Asia/Seoul", label: "Сеул (KST, UTC+9)" },
+                      { value: "Asia/Bangkok", label: "Бангкок (ICT, UTC+7)" },
+                      { value: "Asia/Jakarta", label: "Джакарта (WIB, UTC+7)" },
+                      { value: "Asia/Manila", label: "Манила (PHT, UTC+8)" },
+                      { value: "Asia/Kuala_Lumpur", label: "Куала-Лумпур (MYT, UTC+8)" },
+                      { value: "Asia/Dubai", label: "Дубай (GST, UTC+4)" },
+                      { value: "Asia/Riyadh", label: "Эр-Рияд (AST, UTC+3)" },
+                      { value: "Asia/Tehran", label: "Тегеран (IRST, UTC+3:30)" },
+                      { value: "Asia/Jerusalem", label: "Иерусалим (IST, UTC+2)" },
+                      { value: "Asia/Kolkata", label: "Мумбаи (IST, UTC+5:30)" },
+                      { value: "Asia/Dhaka", label: "Дакка (BST, UTC+6)" },
+                      { value: "Asia/Kathmandu", label: "Катманду (NPT, UTC+5:45)" },
+                      { value: "Africa/Cairo", label: "Каир (EET, UTC+2)" },
+                      { value: "Africa/Johannesburg", label: "Йоханнесбург (SAST, UTC+2)" },
+                      { value: "Africa/Lagos", label: "Лагос (WAT, UTC+1)" },
+                      { value: "Africa/Nairobi", label: "Найроби (EAT, UTC+3)" },
+                      { value: "Africa/Casablanca", label: "Касабланка (WET, UTC+0)" },
+                      { value: "Australia/Sydney", label: "Сидней (AEDT, UTC+11)" },
+                      { value: "Australia/Melbourne", label: "Мельбурн (AEDT, UTC+11)" },
+                      { value: "Australia/Brisbane", label: "Брисбен (AEST, UTC+10)" },
+                      { value: "Australia/Perth", label: "Перт (AWST, UTC+8)" },
+                      { value: "Pacific/Auckland", label: "Окленд (NZDT, UTC+13)" },
+                      { value: "Pacific/Honolulu", label: "Гонолулу (HST, UTC-10)" },
+                    ]}
+                    size="md"
                   />
                 </div>
               </div>
@@ -520,24 +701,34 @@ export const WorkspacesAdmin: React.FC = () => {
           <div className="bg-white rounded-2xl border border-gray-300 p-8 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Создать тип пространства</h2>
             <p className="text-sm text-gray-500 mb-8">
-              Тип пространства определяет категорию помещения (например, &quot;Переговорная&quot;, &quot;Кабинет&quot;, &quot;Кухня&quot;). 
+              Тип пространства определяет категорию помещения (например, &quot;Переговорная&quot;, &quot;Кабинет&quot;, &quot;Кухня&quot;).
               Эти типы используются при создании помещений в конструкторе карты.
             </p>
 
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ID локации <span className="text-red-500">*</span>
+                  Локация <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                  placeholder="Введите ID локации"
-                  value={stLocationId}
-                  onChange={(e) => setStLocationId(e.target.value)}
+                <CustomSelect
+                  value={stLocationId || null}
+                  onChange={(val) => setStLocationId(String(val || ""))}
+                  options={locations.map((location) => ({
+                    value: String(location.id),
+                    label: `${location.name}${location.city ? ` (${location.city})` : ""}${location.isActive ? "" : " [Неактивна]"}`,
+                  }))}
+                  placeholder="Выберите локацию"
+                  disabled={loadingLocations}
+                  size="md"
                 />
+                {loadingLocations && (
+                  <p className="text-xs text-gray-500 mt-1.5">Загрузка локаций...</p>
+                )}
+                {!loadingLocations && locations.length === 0 && organizationId && (
+                  <p className="text-xs text-gray-500 mt-1.5">Локации не найдены. Создайте локацию на вкладке &quot;Создание локации&quot;.</p>
+                )}
                 {createdLocationId && (
-                  <p className="text-xs text-gray-500 mt-1.5">
+                  <p className="text-xs text-blue-600 mt-1.5">
                     Последняя созданная локация: ID {createdLocationId}
                   </p>
                 )}
@@ -564,11 +755,10 @@ export const WorkspacesAdmin: React.FC = () => {
                   {availableDurations.map((duration) => (
                     <label
                       key={duration}
-                      className={`flex items-center justify-center px-4 py-3 border rounded-lg cursor-pointer transition-all ${
-                        stAllowedDurations.includes(duration)
-                          ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-blue-300 hover:bg-blue-50"
-                      }`}
+                      className={`flex items-center justify-center px-4 py-3 border rounded-lg cursor-pointer transition-all ${stAllowedDurations.includes(duration)
+                        ? "bg-blue-500 text-white border-blue-500"
+                        : "bg-white text-gray-700 border-gray-300 hover:border-blue-300 hover:bg-blue-50"
+                        }`}
                     >
                       <input
                         type="checkbox"
@@ -605,22 +795,33 @@ export const WorkspacesAdmin: React.FC = () => {
           <div className="bg-white rounded-2xl border border-gray-300 p-8 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Конструктор карты офиса</h2>
             <p className="text-sm text-gray-500 mb-8">
-              Откройте визуальный конструктор для создания помещений на карте офиса. 
+              Откройте визуальный конструктор для создания помещений на карте офиса.
               Вы сможете нарисовать этажи, комнаты и настроить их параметры.
             </p>
 
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ID локации <span className="text-red-500">*</span>
+                  Локация <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none mb-4"
-                  placeholder="Введите ID созданной локации"
-                  value={constructorLocationId}
-                  onChange={(e) => setConstructorLocationId(e.target.value)}
+                <CustomSelect
+                  value={constructorLocationId || null}
+                  onChange={(val) => setConstructorLocationId(String(val || ""))}
+                  options={locations.map((location) => ({
+                    value: String(location.id),
+                    label: `${location.name}${location.city ? ` (${location.city})` : ""}${location.isActive ? "" : " [Неактивна]"}`,
+                  }))}
+                  placeholder="Выберите локацию"
+                  disabled={loadingLocations}
+                  size="md"
+                  className="mb-4"
                 />
+                {loadingLocations && (
+                  <p className="text-xs text-gray-500 mb-4">Загрузка локаций...</p>
+                )}
+                {!loadingLocations && locations.length === 0 && organizationId && (
+                  <p className="text-xs text-gray-500 mb-4">Локации не найдены. Создайте локацию на вкладке &quot;Создание локации&quot;.</p>
+                )}
                 {createdLocationId && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                     <p className="text-sm text-green-800">
@@ -659,25 +860,30 @@ export const WorkspacesAdmin: React.FC = () => {
           <div className="bg-white rounded-2xl border border-gray-300 p-8 transition-all duration-200 hover:border-blue-500 hover:shadow-sm">
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Просмотр данных по локации</h2>
             <p className="text-sm text-gray-500 mb-8">
-              Введите ID локации, чтобы просмотреть активные бронирования и список пользователей.
+              Выберите локацию, чтобы посмотреть карту офиса, типы помещений, список всех помещений, активные бронирования и пользователей.
             </p>
 
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ID локации
+                  Локация
                 </label>
                 <div className="flex gap-3">
-                  <input
-                    type="text"
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                    placeholder="Введите ID локации"
-                    value={viewLocationId}
-                    onChange={(e) => setViewLocationId(e.target.value)}
+                  <CustomSelect
+                    value={viewLocationId || null}
+                    onChange={(val) => setViewLocationId(String(val || ""))}
+                    options={locations.map((location) => ({
+                      value: String(location.id),
+                      label: `${location.name}${location.city ? ` (${location.city})` : ""}${location.isActive ? "" : " [Неактивна]"}`,
+                    }))}
+                    placeholder="Выберите локацию"
+                    disabled={loadingLocations}
+                    size="md"
+                    className="flex-1"
                   />
                   <Button
                     onClick={handleLoadLocationData}
-                    disabled={loadingLocationData || !viewLocationId}
+                    disabled={loadingLocationData || !viewLocationId || loadingLocations}
                     variant="filled"
                     color="blue"
                     className="whitespace-nowrap"
@@ -685,7 +891,94 @@ export const WorkspacesAdmin: React.FC = () => {
                     {loadingLocationData ? "Загрузка..." : "Загрузить"}
                   </Button>
                 </div>
+                {loadingLocations && (
+                  <p className="text-xs text-gray-500 mt-1.5">Загрузка локаций...</p>
+                )}
+                {!loadingLocations && locations.length === 0 && organizationId && (
+                  <p className="text-xs text-gray-500 mt-1.5">Локации не найдены. Создайте локацию на вкладке &quot;Создание локации&quot;.</p>
+                )}
               </div>
+
+              {/* Карта офиса / переход к карте */}
+              {viewLocationId && (
+                <div className="mt-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Карта офиса
+                  </h3>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Откройте интерактивную карту офиса, чтобы посмотреть этажи и расположение всех помещений.
+                  </p>
+                  <Link
+                    href={`/map?mode=view&locationId=${encodeURIComponent(viewLocationId)}`}
+                    className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Открыть карту офиса
+                  </Link>
+                </div>
+              )}
+
+              {/* Типы помещений */}
+              {locationSpaceTypes.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Типы помещений ({locationSpaceTypes.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {locationSpaceTypes.map((t) => (
+                      <div
+                        key={t.id}
+                        className="p-4 bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {t.type}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            ID типа: {t.id}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Список помещений */}
+              {locationSpaces.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Помещения в локации ({locationSpaces.length})
+                  </h3>
+                  <div className="max-h-80 overflow-auto space-y-3">
+                    {locationSpaces.map((s) => (
+                      <div
+                        key={s.id}
+                        className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
+                      >
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-gray-900 mb-1">
+                              {s.spaceType} · {s.capacity} мест
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              Этаж: {s.floor?.floorNumber ?? "—"} · ID помещения: {s.id}
+                            </div>
+                          </div>
+                          <span
+                            className={`text-xs px-3 py-1 rounded-full font-medium ${
+                              s.bookable
+                                ? "bg-green-100 text-green-800"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {s.bookable ? "Доступно для бронирования" : "Недоступно"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {locationBookings.length > 0 && (
                 <div className="mt-8">
@@ -702,9 +995,8 @@ export const WorkspacesAdmin: React.FC = () => {
                               {b.userEmail} · {new Date(b.start).toLocaleString("ru-RU")}
                             </div>
                           </div>
-                          <span className={`text-xs px-3 py-1 rounded-full font-medium ${
-                            b.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                          }`}>
+                          <span className={`text-xs px-3 py-1 rounded-full font-medium ${b.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                            }`}>
                             {b.status}
                           </span>
                         </div>

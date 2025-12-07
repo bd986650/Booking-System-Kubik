@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { useAuthStore } from "@/features/auth";
+import React, { useMemo, useState } from "react";
+import { useAuthStore, useForceRefresh } from "@/features/auth";
 import { ROLE_LABELS, type UserRole } from "@/entities/user";
+import { Button } from "@/shared/ui/buttons";
 
 // Приоритет ролей (от высшего к низшему)
 const ROLE_PRIORITY: Record<UserRole, number> = {
-  ROLE_ADMIN_WORKSPACE: 3,
-  ROLE_ADMIN_PROJECT: 2,
+  ROLE_ADMIN_PROJECT: 3,
+  ROLE_ADMIN_WORKSPACE: 2,
   ROLE_USER: 1,
 };
 
@@ -30,15 +31,23 @@ const getHighestRole = (roles: string[]): UserRole | null => {
 };
 
 export const Profile: React.FC = () => {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+  const { forceRefresh } = useForceRefresh();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const highestRole = useMemo(() => {
     return user?.roles ? getHighestRole(user.roles) : null;
   }, [user?.roles]);
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await forceRefresh(true);
+    setIsRefreshing(false);
+  };
+
   if (!user) {
     return (
-      <div className="p-8">
+      <div>
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
           <p className="text-yellow-800">Информация о пользователе недоступна</p>
         </div>
@@ -47,9 +56,7 @@ export const Profile: React.FC = () => {
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Профиль</h1>
-
+    <div>
       <div className="bg-white rounded-2xl border border-gray-300 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-8 py-8">
           <div className="flex items-center gap-4">
@@ -133,6 +140,31 @@ export const Profile: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="px-8 pb-8 pt-5 border-t border-gray-100 flex justify-end items-center gap-3">
+          <Button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            variant="outline"
+            color="blue"
+            className="text-sm py-2 px-4"
+          >
+            {isRefreshing ? "Обновление..." : "Обновить данные"}
+          </Button>
+          <Button
+            onClick={() => {
+              logout();
+              if (typeof window !== "undefined") {
+                window.location.href = "/login";
+              }
+            }}
+            variant="outline"
+            color="gray"
+            className="text-sm py-2 px-4"
+          >
+            Выйти
+          </Button>
         </div>
       </div>
     </div>
